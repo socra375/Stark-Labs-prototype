@@ -1,6 +1,6 @@
-import type { AppState } from '../../core/AppState';
+import type { App } from '../../core/App';
 
-export function createHeader(state: AppState): HTMLElement {
+export function createHeader(app: App): HTMLElement {
   const root = document.createElement('div');
   root.className = 'app-header';
 
@@ -13,17 +13,24 @@ export function createHeader(state: AppState): HTMLElement {
 
   const projectName = document.createElement('div');
   projectName.className = 'project-name';
-  state.currentProject.subscribe((p) => {
+  app.state.currentProject.subscribe((p) => {
     projectName.textContent = p ? `PROJECT: ${p.name}` : '';
   }, true);
+
+  const exportBtn = document.createElement('button');
+  exportBtn.className = 'btn';
+  exportBtn.style.cssText = 'padding:4px 10px;font-size:11px;';
+  exportBtn.textContent = 'Export .stark';
+  exportBtn.addEventListener('click', () => app.exportProject());
+  app.state.currentProject.subscribe((p) => { exportBtn.disabled = !p; }, true);
 
   const projectsBtn = document.createElement('button');
   projectsBtn.className = 'btn';
   projectsBtn.style.cssText = 'padding:4px 10px;font-size:11px;';
   projectsBtn.textContent = 'Projects';
-  projectsBtn.addEventListener('click', () => state.screen.set('landing'));
+  projectsBtn.addEventListener('click', () => app.state.screen.set('landing'));
 
-  right.append(projectName, projectsBtn);
+  right.append(projectName, exportBtn, projectsBtn);
   root.append(brand, right);
   return root;
 }

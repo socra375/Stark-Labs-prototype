@@ -19,7 +19,22 @@ export function createLandingScreen(app: App): HTMLElement {
   newBtn.className = 'btn active';
   newBtn.textContent = 'New Prototype';
   newBtn.addEventListener('click', () => openNewPrototypeDialog(app, () => {}));
-  actions.appendChild(newBtn);
+
+  const importBtn = document.createElement('button');
+  importBtn.className = 'btn';
+  importBtn.textContent = 'Import .stark';
+  importBtn.addEventListener('click', async () => {
+    try {
+      const meta = await app.importProject();
+      if (meta) {
+        app.state.screen.set('editor');
+      }
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Import failed.');
+    }
+  });
+
+  actions.append(newBtn, importBtn);
 
   const recentSection = document.createElement('div');
   recentSection.className = 'landing-recent';

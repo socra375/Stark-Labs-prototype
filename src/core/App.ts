@@ -30,6 +30,7 @@ import { VersionRepository } from '../storage/VersionRepository';
 import { HistoryRepository } from '../storage/HistoryRepository';
 import { AutosaveService } from '../storage/AutosaveService';
 import { getTemplate } from '../templates/TemplateRegistry';
+import { exportProject, importProjectFromPicker } from '../storage/StarkFileFormat';
 import type { Vec3, Connection, ProjectMeta } from './types';
 
 /** Top-level orchestrator wiring core managers, the 3D viewport, and app state together. */
@@ -121,6 +122,20 @@ export class App {
       this.selection.clear();
     }
     return ok;
+  }
+
+  exportProject(): void {
+    exportProject(this.liveScene());
+  }
+
+  async importProject(): Promise<ProjectMeta | null> {
+    const meta = await importProjectFromPicker(this.liveScene());
+    if (meta) {
+      this.history.clear();
+      this.selection.clear();
+      await this.saveProject();
+    }
+    return meta;
   }
 
   // --- Selection-driven actions -------------------------------------------------

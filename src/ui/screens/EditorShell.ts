@@ -5,6 +5,8 @@ import { createInspectorPanel } from '../panels/InspectorPanel';
 import { createLeftPanel } from '../panels/LeftPanel';
 import { createMaterialsPanel } from '../panels/MaterialsPanel';
 import { createAssembliesPanel } from '../panels/AssembliesPanel';
+import { createVersionsPanel } from '../panels/VersionsPanel';
+import { createActivityLogPanel } from '../panels/ActivityLogPanel';
 import { createLandingScreen } from './LandingScreen';
 
 export function mountEditorShell(root: HTMLElement): App {
@@ -30,11 +32,13 @@ export function mountEditorShell(root: HTMLElement): App {
 
   const app = new App(viewportContainer);
 
-  shell.insertBefore(header(app.state), shell.firstChild);
+  shell.insertBefore(header(app), shell.firstChild);
   left.appendChild(createLeftPanel(app));
   right.appendChild(createInspectorPanel(app.inspector));
   right.appendChild(createMaterialsPanel(app));
   right.appendChild(createAssembliesPanel(app));
+  right.appendChild(createVersionsPanel(app));
+  right.appendChild(createActivityLogPanel(app));
   shell.appendChild(createBottomToolbar(app));
   shell.appendChild(createLandingScreen(app));
 
