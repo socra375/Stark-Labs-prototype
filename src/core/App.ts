@@ -39,6 +39,8 @@ import { PermissionValidator } from '../ai/PermissionValidator';
 import { PreviewGenerator } from '../ai/PreviewGenerator';
 import { AICommandExecutor } from '../ai/AICommandExecutor';
 import { AnalysisEngine } from '../ai/AnalysisEngine';
+import { SimulationEngine } from '../simulation/SimulationEngine';
+import { BotManager } from '../bots/BotManager';
 import type { Vec3, Connection, ProjectMeta } from './types';
 
 /** Top-level orchestrator wiring core managers, the 3D viewport, and app state together. */
@@ -68,6 +70,8 @@ export class App {
   readonly aiTools = new ToolRegistry();
   readonly aiExecutor: AICommandExecutor;
   readonly analysisEngine: AnalysisEngine;
+  readonly simulation = new SimulationEngine();
+  readonly bots: BotManager;
   private pivot: GroupTransformPivot;
   private dragBefore: Map<string, TransformDelta['before']> = new Map();
 
@@ -87,6 +91,7 @@ export class App {
     this.historyRepo = new HistoryRepository(this.db);
     this.autosave = new AutosaveService(this.bus, this.projectRepo, this.liveScene());
     this.analysisEngine = new AnalysisEngine(this.objects, this.assembly, this.coords);
+    this.bots = new BotManager(this.objects);
     this.aiExecutor = new AICommandExecutor(
       this.aiTools,
       new ToolParser(this.objects),
