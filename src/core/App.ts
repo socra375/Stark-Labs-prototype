@@ -24,7 +24,7 @@ export class App {
   readonly bus = new EventBus();
   readonly state = new AppState();
   readonly objects = new ObjectManager(this.bus);
-  readonly materials = new MaterialManager();
+  readonly materials = new MaterialManager(this.bus);
   readonly viewport: Viewport;
   readonly sceneSync: SceneSync;
   readonly coords: CoordinateSystem;

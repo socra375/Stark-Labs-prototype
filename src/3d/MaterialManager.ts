@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { EventBus } from '../core/EventBus';
 import type { MaterialDefinition, MaterialPreset } from '../core/types';
 import { generateId } from '../utils/ids';
 
@@ -13,6 +14,8 @@ export const MATERIAL_PRESETS: Record<Exclude<MaterialPreset, 'custom'>, Omit<Ma
 export class MaterialManager {
   private definitions = new Map<string, MaterialDefinition>();
   private cache = new Map<string, THREE.MeshStandardMaterial>();
+
+  constructor(private bus?: EventBus) {}
 
   createPreset(preset: Exclude<MaterialPreset, 'custom'>, name?: string): MaterialDefinition {
     const base = MATERIAL_PRESETS[preset];
@@ -50,11 +53,25 @@ export class MaterialManager {
     return [...this.definitions.values()];
   }
 
+  /** Mutates the definition and, if a THREE material instance is already cached, updates it in
+   * place so every mesh referencing this materialId reflects the change immediately (rebuilding
+   * a new instance instead would leave existing meshes pointing at the stale one). */
   update(id: string, patch: Partial<MaterialDefinition>): void {
     const def = this.definitions.get(id);
     if (!def) return;
     Object.assign(def, patch);
-    this.invalidate(id);
+    const live = this.cache.get(id);
+    if (live) {
+      if (patch.color !== undefined) live.color.set(patch.color);
+      if (patch.metalness !== undefined) live.metalness = patch.metalness;
+      if (patch.roughness !== undefined) live.roughness = patch.roughness;
+      if (patch.opacity !== undefined) live.opacity = patch.opacity;
+      if (patch.transparent !== undefined || patch.opacity !== undefined) live.transparent = def.transparent || def.opacity < 1;
+      if (patch.emissive !== undefined) live.emissive.set(patch.emissive);
+      if (patch.emissiveIntensity !== undefined) live.emissiveIntensity = patch.emissiveIntensity;
+      live.needsUpdate = true;
+    }
+    this.bus?.emit('material:updated', { materialId: id });
   }
 
   remove(id: string): void {
@@ -93,10 +110,6 @@ export class MaterialManager {
     });
     this.cache.set(id, mat);
     return mat;
-  }
-
-  private invalidate(id: string): void {
-    this.disposeCached(id);
   }
 
   private disposeCached(id: string): void {

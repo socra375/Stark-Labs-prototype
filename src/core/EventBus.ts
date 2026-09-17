@@ -11,6 +11,7 @@ export interface EventMap {
   'selection:changed': { objectIds: string[] };
   'tool:changed': { tool: AppTool };
   'history:changed': {};
+  'material:updated': { materialId: string };
   'project:dirty': {};
   'project:saved': { projectId: string };
 }

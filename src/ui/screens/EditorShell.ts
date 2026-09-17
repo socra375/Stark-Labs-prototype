@@ -3,6 +3,7 @@ import { createHeader } from '../toolbar/Header';
 import { createBottomToolbar } from '../toolbar/BottomToolbar';
 import { createInspectorPanel } from '../panels/InspectorPanel';
 import { createLeftPanel } from '../panels/LeftPanel';
+import { createMaterialsPanel } from '../panels/MaterialsPanel';
 
 export function mountEditorShell(root: HTMLElement): App {
   root.innerHTML = '';
@@ -30,6 +31,7 @@ export function mountEditorShell(root: HTMLElement): App {
   shell.insertBefore(header(app.state), shell.firstChild);
   left.appendChild(createLeftPanel(app));
   right.appendChild(createInspectorPanel(app.inspector));
+  right.appendChild(createMaterialsPanel(app));
   shell.appendChild(createBottomToolbar(app));
 
   return app;
