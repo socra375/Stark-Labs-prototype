@@ -16,8 +16,15 @@ import { GroupCommand } from '../editor/commands/GroupCommand';
 import { UngroupCommand } from '../editor/commands/UngroupCommand';
 import { DeleteObjectCommand } from '../editor/commands/DeleteObjectCommand';
 import { DuplicateCommand } from '../editor/commands/DuplicateCommand';
+import { CreateObjectCommand } from '../editor/commands/CreateObjectCommand';
 import { TransformCommand, type TransformDelta } from '../editor/commands/TransformCommand';
-import type { Vec3 } from './types';
+import { MirrorTool } from '../editor/MirrorTool';
+import { AssemblyManager } from '../editor/AssemblyManager';
+import { AssemblyVisualizer } from '../3d/AssemblyVisualizer';
+import { ConnectCommand } from '../editor/commands/ConnectCommand';
+import { DisconnectCommand } from '../editor/commands/DisconnectCommand';
+import { generateId } from '../utils/ids';
+import type { Vec3, Connection } from './types';
 
 /** Top-level orchestrator wiring core managers, the 3D viewport, and app state together. */
 export class App {
@@ -34,6 +41,9 @@ export class App {
   readonly inspector: Inspector;
   readonly history: HistoryManager;
   readonly grouping: GroupingManager;
+  readonly mirror: MirrorTool;
+  readonly assembly: AssemblyManager;
+  readonly assemblyVisualizer: AssemblyVisualizer;
   private pivot: GroupTransformPivot;
   private dragBefore: Map<string, TransformDelta['before']> = new Map();
 
@@ -45,6 +55,9 @@ export class App {
     this.inspector = new Inspector(this.bus, this.state, this.objects);
     this.history = new HistoryManager(this.bus, () => this.state.currentProject.get()?.id ?? 'unsaved');
     this.grouping = new GroupingManager(this.objects, this.coords);
+    this.mirror = new MirrorTool(this.objects, this.coords);
+    this.assembly = new AssemblyManager(this.bus);
+    this.assemblyVisualizer = new AssemblyVisualizer(this.bus, this.assembly, this.coords, this.viewport.sceneManager.scene);
     this.pivot = new GroupTransformPivot(this.objects, this.coords, this.viewport.sceneManager.scene);
     this.gizmo = new TransformGizmo(
       this.viewport.camera.instance,
@@ -94,6 +107,38 @@ export class App {
     this.selection.set(plan.reparents.map((r) => r.objectId));
   }
 
+  mirrorSelection(axis: 'x' | 'y' | 'z'): void {
+    const ids = this.selectableIds(this.state.selection.get());
+    const newIds: string[] = [];
+    for (const id of ids) {
+      const snapshots = this.mirror.planMirror(id, axis);
+      const label = `Mirrored ${this.objects.get(id)?.name} across ${axis.toUpperCase()}`;
+      this.history.execute(new CreateObjectCommand(this.objects, snapshots, label));
+      newIds.push(snapshots[0].id);
+    }
+    if (newIds.length) this.selection.set(newIds);
+  }
+
+  connectSelection(): void {
+    const ids = this.selectableIds(this.state.selection.get());
+    if (ids.length !== 2) return;
+    const [a, b] = ids;
+    if (this.assembly.existsBetween(a, b)) return;
+    const connection: Connection = {
+      id: generateId('conn'),
+      parentObjectId: a,
+      childObjectId: b,
+      connectionPointA: [0, 0, 0],
+      connectionPointB: [0, 0, 0],
+      createdAt: new Date().toISOString(),
+    };
+    this.history.execute(new ConnectCommand(this.assembly, connection));
+  }
+
+  disconnectConnection(connectionId: string): void {
+    this.history.execute(new DisconnectCommand(this.assembly, connectionId));
+  }
+
   private selectableIds(ids: string[]): string[] {
     return ids.filter((id) => !this.objects.get(id)?.locked);
   }
@@ -126,6 +171,7 @@ export class App {
     this.bus.on('object:removed', ({ objectId }) => {
       const ids = this.state.selection.get();
       if (ids.includes(objectId)) this.selection.set(ids.filter((id) => id !== objectId));
+      this.assembly.removeAllForObject(objectId);
     });
 
     this.state.activeTool.subscribe((tool) => {

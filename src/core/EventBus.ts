@@ -1,4 +1,4 @@
-import type { SceneObject } from './types';
+import type { SceneObject, Connection } from './types';
 import type { AppTool } from './AppState';
 
 export interface EventMap {
@@ -12,6 +12,8 @@ export interface EventMap {
   'tool:changed': { tool: AppTool };
   'history:changed': {};
   'material:updated': { materialId: string };
+  'assembly:created': { connection: Connection };
+  'assembly:removed': { connectionId: string };
   'project:dirty': {};
   'project:saved': { projectId: string };
 }

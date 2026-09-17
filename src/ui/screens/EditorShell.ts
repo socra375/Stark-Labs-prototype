@@ -4,6 +4,7 @@ import { createBottomToolbar } from '../toolbar/BottomToolbar';
 import { createInspectorPanel } from '../panels/InspectorPanel';
 import { createLeftPanel } from '../panels/LeftPanel';
 import { createMaterialsPanel } from '../panels/MaterialsPanel';
+import { createAssembliesPanel } from '../panels/AssembliesPanel';
 
 export function mountEditorShell(root: HTMLElement): App {
   root.innerHTML = '';
@@ -32,6 +33,7 @@ export function mountEditorShell(root: HTMLElement): App {
   left.appendChild(createLeftPanel(app));
   right.appendChild(createInspectorPanel(app.inspector));
   right.appendChild(createMaterialsPanel(app));
+  right.appendChild(createAssembliesPanel(app));
   shell.appendChild(createBottomToolbar(app));
 
   return app;

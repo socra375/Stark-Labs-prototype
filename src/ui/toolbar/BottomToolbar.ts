@@ -67,6 +67,29 @@ export function createBottomToolbar(app: App, extra: HTMLElement[] = []): HTMLEl
   root.append(groupBtn, ungroupBtn, duplicateBtn, deleteBtn);
   root.appendChild(divider());
 
+  const mirrorButtons: HTMLButtonElement[] = (['x', 'y', 'z'] as const).map((axis) => {
+    const btn = document.createElement('button');
+    btn.className = 'btn';
+    btn.textContent = `Mirror ${axis.toUpperCase()}`;
+    btn.addEventListener('click', () => app.mirrorSelection(axis));
+    return btn;
+  });
+
+  const connectBtn = document.createElement('button');
+  connectBtn.className = 'btn';
+  connectBtn.textContent = 'Connect';
+  connectBtn.addEventListener('click', () => app.connectSelection());
+
+  const refreshAssemblyButtons = (): void => {
+    const n = app.state.selection.get().length;
+    for (const btn of mirrorButtons) btn.disabled = n < 1;
+    connectBtn.disabled = n !== 2;
+  };
+  app.state.selection.subscribe(refreshAssemblyButtons, true);
+
+  root.append(...mirrorButtons, connectBtn);
+  root.appendChild(divider());
+
   const undoBtn = document.createElement('button');
   undoBtn.className = 'btn';
   undoBtn.textContent = 'Undo';
