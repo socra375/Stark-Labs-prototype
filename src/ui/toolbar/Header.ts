@@ -17,6 +17,25 @@ export function createHeader(app: App): HTMLElement {
     projectName.textContent = p ? `PROJECT: ${p.name}` : '';
   }, true);
 
+  const importModelBtn = document.createElement('button');
+  importModelBtn.className = 'btn';
+  importModelBtn.style.cssText = 'padding:4px 10px;font-size:11px;';
+  importModelBtn.textContent = 'Import Model';
+  importModelBtn.addEventListener('click', async () => {
+    try {
+      await app.importModel();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Import failed.');
+    }
+  });
+  const updateImportBtn = (): void => {
+    const importing = app.state.importing.get();
+    importModelBtn.disabled = !app.state.currentProject.get() || importing;
+    importModelBtn.textContent = importing ? 'Importing…' : 'Import Model';
+  };
+  app.state.currentProject.subscribe(updateImportBtn, true);
+  app.state.importing.subscribe(updateImportBtn, true);
+
   const exportBtn = document.createElement('button');
   exportBtn.className = 'btn';
   exportBtn.style.cssText = 'padding:4px 10px;font-size:11px;';
@@ -30,7 +49,7 @@ export function createHeader(app: App): HTMLElement {
   projectsBtn.textContent = 'Projects';
   projectsBtn.addEventListener('click', () => app.state.screen.set('landing'));
 
-  right.append(projectName, exportBtn, projectsBtn);
+  right.append(projectName, importModelBtn, exportBtn, projectsBtn);
   root.append(brand, right);
   return root;
 }

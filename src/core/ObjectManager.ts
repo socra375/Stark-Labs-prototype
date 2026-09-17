@@ -61,6 +61,7 @@ export class ObjectManager {
       this.rootIds.push(obj.id);
     }
     this.bus.emit('object:created', { object: obj });
+    this.bus.emit('project:dirty', {});
   }
 
   get(id: string): SceneObject | undefined {

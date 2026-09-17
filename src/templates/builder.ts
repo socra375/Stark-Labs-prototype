@@ -38,7 +38,7 @@ export function buildTree(nodes: TemplateNode[], materialsByKey: Record<string, 
       children: childIds,
       visible: true,
       locked: false,
-      metadata: node.metadata ?? {},
+      metadata: { ...(node.metadata ?? {}), origin: 'build' },
     };
     result.push(obj);
     if (node.children?.length) {

@@ -32,6 +32,9 @@ import { HistoryRepository } from '../storage/HistoryRepository';
 import { AutosaveService } from '../storage/AutosaveService';
 import { getTemplate } from '../templates/TemplateRegistry';
 import { exportProject, importProjectFromPicker } from '../storage/StarkFileFormat';
+import { importModelFile } from '../3d/import/ModelImporter';
+import { ImportCommand } from '../editor/commands/ImportCommand';
+import { pickFile } from '../utils/download';
 import { AIService } from '../ai/AIService';
 import { ToolRegistry } from '../ai/ToolRegistry';
 import { ToolParser } from '../ai/ToolParser';
@@ -175,6 +178,23 @@ export class App {
       await this.saveProject();
     }
     return meta;
+  }
+
+  /** Imports a .glb/.gltf/.obj/.stl model into the currently open project (not a whole-project
+   * import — see importProject() for that). Mirrors importProject()'s shape: no internal
+   * try/catch, the UI's click handler surfaces failures via window.alert. */
+  async importModel(): Promise<void> {
+    const file = await pickFile('.glb,.gltf,.obj,.stl');
+    if (!file) return;
+    this.state.importing.set(true);
+    try {
+      const result = await importModelFile(file);
+      const cmd = new ImportCommand(this.objects, this.materials, this.assets, { ...result, sourceName: file.name });
+      this.history.execute(cmd);
+      this.selection.set(result.objects.filter((o) => !o.parentId).map((o) => o.id));
+    } finally {
+      this.state.importing.set(false);
+    }
   }
 
   // --- Selection-driven actions -------------------------------------------------

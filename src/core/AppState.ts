@@ -11,4 +11,6 @@ export class AppState {
   readonly currentProject = signal<ProjectMeta | null>(null);
   readonly dirty = signal<boolean>(false);
   readonly transformSpace = signal<'local' | 'world'>('local');
+  /** Real indeterminate-progress flag gated on the actual import parse promise — no fake percentage. */
+  readonly importing = signal<boolean>(false);
 }
