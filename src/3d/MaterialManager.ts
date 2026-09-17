@@ -72,6 +72,7 @@ export class MaterialManager {
       live.needsUpdate = true;
     }
     this.bus?.emit('material:updated', { materialId: id });
+    this.bus?.emit('project:dirty', {});
   }
 
   remove(id: string): void {

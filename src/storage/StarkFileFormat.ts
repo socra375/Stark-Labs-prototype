@@ -22,7 +22,7 @@ export interface StarkFile {
 export function exportProject(scene: LiveScene): void {
   const meta = scene.state.currentProject.get();
   if (!meta) return;
-  const snapshot = Serializer.capture(scene.objects, scene.materials, scene.assembly, scene.assets);
+  const snapshot = Serializer.capture(scene.objects, scene.materials, scene.assembly, scene.assets, scene.referenceImages);
   const file: StarkFile = {
     format: STARK_FORMAT,
     version: STARK_FORMAT_VERSION,
@@ -67,7 +67,7 @@ export async function importProjectFromPicker(scene: LiveScene): Promise<Project
     id: `proj_${crypto.randomUUID().slice(0, 8)}`,
     updatedAt: new Date().toISOString(),
   };
-  Serializer.apply(scene.objects, scene.materials, scene.assembly, scene.assets, parsed);
+  Serializer.apply(scene.objects, scene.materials, scene.assembly, scene.assets, scene.referenceImages, parsed);
   scene.state.currentProject.set(meta);
   scene.state.dirty.set(true);
   return meta;

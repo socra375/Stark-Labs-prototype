@@ -44,6 +44,19 @@ export function createHeader(app: App): HTMLElement {
   imageTo3DBtn.addEventListener('click', () => openImageTo3DWorkspace(app));
   app.state.currentProject.subscribe((p) => { imageTo3DBtn.disabled = !p; }, true);
 
+  const addReferenceBtn = document.createElement('button');
+  addReferenceBtn.className = 'btn';
+  addReferenceBtn.style.cssText = 'padding:4px 10px;font-size:11px;';
+  addReferenceBtn.textContent = 'Add Reference Image';
+  addReferenceBtn.addEventListener('click', async () => {
+    try {
+      await app.addReferenceImage();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Failed to add reference image.');
+    }
+  });
+  app.state.currentProject.subscribe((p) => { addReferenceBtn.disabled = !p; }, true);
+
   const exportBtn = document.createElement('button');
   exportBtn.className = 'btn';
   exportBtn.style.cssText = 'padding:4px 10px;font-size:11px;';
@@ -57,7 +70,7 @@ export function createHeader(app: App): HTMLElement {
   projectsBtn.textContent = 'Projects';
   projectsBtn.addEventListener('click', () => app.state.screen.set('landing'));
 
-  right.append(projectName, importModelBtn, imageTo3DBtn, exportBtn, projectsBtn);
+  right.append(projectName, importModelBtn, imageTo3DBtn, addReferenceBtn, exportBtn, projectsBtn);
   root.append(brand, right);
   return root;
 }

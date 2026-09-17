@@ -1,4 +1,8 @@
 export type Vec3 = [number, number, number];
+/** x, y, z, w — THREE.Quaternion order. Used where free unconstrained 3D rotation with no
+ * gimbal lock is needed (e.g. ReferenceImage), as opposed to a SceneObject's own stored local
+ * Euler transform. */
+export type Quat = [number, number, number, number];
 
 export type GeometryType =
   | 'box' | 'sphere' | 'cylinder' | 'cone' | 'capsule' | 'plane' | 'torus' | 'imported';
@@ -100,7 +104,7 @@ export interface ReferenceImage {
   assetId: string; // AssetRecord of kind 'sourceImage'
   name: string;
   position: Vec3;
-  rotation: Vec3;
+  rotation: Quat;
   scale: Vec3;
   opacity: number;
   visible: boolean;

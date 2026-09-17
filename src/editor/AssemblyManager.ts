@@ -26,12 +26,14 @@ export class AssemblyManager {
     };
     this.connections.set(connection.id, connection);
     this.bus.emit('assembly:created', { connection });
+    this.bus.emit('project:dirty', {});
     return connection;
   }
 
   insert(connection: Connection): void {
     this.connections.set(connection.id, connection);
     this.bus.emit('assembly:created', { connection });
+    this.bus.emit('project:dirty', {});
   }
 
   /** No physical solver runs on `type` yet (see SimulationEngine) — it's real, stored data for a future one. */
@@ -40,11 +42,13 @@ export class AssemblyManager {
     if (!connection) return;
     connection.type = type;
     this.bus.emit('assembly:updated', { connection });
+    this.bus.emit('project:dirty', {});
   }
 
   disconnect(connectionId: string): void {
     if (!this.connections.delete(connectionId)) return;
     this.bus.emit('assembly:removed', { connectionId });
+    this.bus.emit('project:dirty', {});
   }
 
   get(id: string): Connection | undefined {

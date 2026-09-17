@@ -5,6 +5,7 @@ import { createInspectorPanel } from '../panels/InspectorPanel';
 import { createLeftPanel } from '../panels/LeftPanel';
 import { createMaterialsPanel } from '../panels/MaterialsPanel';
 import { createAssembliesPanel } from '../panels/AssembliesPanel';
+import { createReferenceImagesPanel } from '../panels/ReferenceImagesPanel';
 import { createVersionsPanel } from '../panels/VersionsPanel';
 import { createActivityLogPanel } from '../panels/ActivityLogPanel';
 import { createAIChatPanel } from '../panels/AIChatPanel';
@@ -43,6 +44,7 @@ export function mountEditorShell(root: HTMLElement): App {
   right.appendChild(createInspectorPanel(app.inspector));
   right.appendChild(createMaterialsPanel(app));
   right.appendChild(createAssembliesPanel(app));
+  right.appendChild(createReferenceImagesPanel(app));
   right.appendChild(createVersionsPanel(app));
   right.appendChild(createActivityLogPanel(app));
   right.appendChild(createSimulationBotsPanel(app));

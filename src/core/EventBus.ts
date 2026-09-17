@@ -1,4 +1,4 @@
-import type { SceneObject, Connection } from './types';
+import type { SceneObject, Connection, ReferenceImage } from './types';
 import type { AppTool } from './AppState';
 
 export interface EventMap {
@@ -17,6 +17,9 @@ export interface EventMap {
   'assembly:removed': { connectionId: string };
   'version:created': { versionId: string };
   'version:restored': { versionId: string };
+  'referenceImage:created': { referenceImage: ReferenceImage };
+  'referenceImage:updated': { referenceImage: ReferenceImage };
+  'referenceImage:removed': { referenceImageId: string };
   'project:dirty': {};
   'project:saved': { projectId: string };
 }

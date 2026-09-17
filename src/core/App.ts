@@ -24,6 +24,11 @@ import { AssemblyManager } from '../editor/AssemblyManager';
 import { AssemblyVisualizer } from '../3d/AssemblyVisualizer';
 import { ConnectCommand } from '../editor/commands/ConnectCommand';
 import { DisconnectCommand } from '../editor/commands/DisconnectCommand';
+import { ReferenceImageManager } from '../editor/ReferenceImageManager';
+import { ReferenceImageVisualizer } from '../3d/ReferenceImageVisualizer';
+import { CreateReferenceImageCommand } from '../editor/commands/CreateReferenceImageCommand';
+import { TransformReferenceImageCommand, type ReferenceImageTransform } from '../editor/commands/TransformReferenceImageCommand';
+import { DeleteReferenceImageCommand } from '../editor/commands/DeleteReferenceImageCommand';
 import { generateId } from '../utils/ids';
 import { Database } from '../storage/Database';
 import { ProjectRepository, type LiveScene } from '../storage/ProjectRepository';
@@ -50,7 +55,7 @@ import { AICommandExecutor } from '../ai/AICommandExecutor';
 import { AnalysisEngine } from '../ai/AnalysisEngine';
 import { SimulationEngine } from '../simulation/SimulationEngine';
 import { BotManager } from '../bots/BotManager';
-import type { Vec3, Connection, ProjectMeta, SceneObject } from './types';
+import type { Vec3, Connection, ProjectMeta, SceneObject, ReferenceImage } from './types';
 
 /** Top-level orchestrator wiring core managers, the 3D viewport, and app state together. */
 export class App {
@@ -71,6 +76,8 @@ export class App {
   readonly mirror: MirrorTool;
   readonly assembly: AssemblyManager;
   readonly assemblyVisualizer: AssemblyVisualizer;
+  readonly referenceImages: ReferenceImageManager;
+  readonly referenceImageVisualizer: ReferenceImageVisualizer;
   readonly db = new Database();
   readonly projectRepo: ProjectRepository;
   readonly versionRepo: VersionRepository;
@@ -85,6 +92,7 @@ export class App {
   readonly bots: BotManager;
   private pivot: GroupTransformPivot;
   private dragBefore: Map<string, TransformDelta['before']> = new Map();
+  private refDragBefore: ReferenceImageTransform | null = null;
 
   constructor(container: HTMLElement) {
     this.viewport = new Viewport(container);
@@ -97,6 +105,8 @@ export class App {
     this.mirror = new MirrorTool(this.objects, this.coords);
     this.assembly = new AssemblyManager(this.bus);
     this.assemblyVisualizer = new AssemblyVisualizer(this.bus, this.assembly, this.coords, this.viewport.sceneManager.scene);
+    this.referenceImages = new ReferenceImageManager(this.bus);
+    this.referenceImageVisualizer = new ReferenceImageVisualizer(this.bus, this.referenceImages, this.assets, this.viewport.sceneManager.scene);
     this.projectRepo = new ProjectRepository(this.db);
     this.versionRepo = new VersionRepository(this.db, this.bus);
     this.historyRepo = new HistoryRepository(this.db);
@@ -134,7 +144,7 @@ export class App {
   // --- Project lifecycle -----------------------------------------------------
 
   liveScene(): LiveScene {
-    return { objects: this.objects, materials: this.materials, assembly: this.assembly, assets: this.assets, state: this.state };
+    return { objects: this.objects, materials: this.materials, assembly: this.assembly, assets: this.assets, referenceImages: this.referenceImages, state: this.state };
   }
 
   newProject(name: string, description: string, templateId: string): ProjectMeta {
@@ -142,10 +152,14 @@ export class App {
     const { components, materials } = getTemplate(templateId).build();
     this.materials.loadAll(materials);
     this.assets.clear();
+    // Must clear before objects.loadAll() fires 'scene:loaded', which triggers
+    // ReferenceImageVisualizer.rebuildAll() off whatever referenceImages currently holds.
+    this.referenceImages.clear();
     this.objects.loadAll(components);
     this.assembly.clear();
     this.history.clear();
     this.selection.clear();
+    this.state.selectedReferenceImageId.set(null);
     this.state.currentProject.set(meta);
     this.state.dirty.set(false);
     // loadAll()-based template seeding never fires 'project:dirty' (it's a bulk load, not an
@@ -168,6 +182,7 @@ export class App {
     if (ok) {
       this.history.clear();
       this.selection.clear();
+      this.state.selectedReferenceImageId.set(null);
     }
     return ok;
   }
@@ -245,6 +260,65 @@ export class App {
     const cmd = new ReconstructionCommitCommand(this.objects, this.materials, this.assets, { sourceImageAsset, geometryAsset, material, object });
     this.history.execute(cmd);
     this.selection.set([object.id]);
+  }
+
+  // --- Reference images (Image -> Build) -------------------------------------
+
+  /** Adds a photo as a non-geometry visual reference plane — never a SceneObject, never touched
+   * by Join/Separate/Mirror/AnalysisEngine. Default scale matches the image's own aspect ratio
+   * so it isn't squished on first placement. */
+  async addReferenceImage(): Promise<void> {
+    const file = await pickFile('image/*');
+    if (!file) return;
+    const bitmap = await createImageBitmap(file);
+    const aspect = bitmap.height / bitmap.width;
+    bitmap.close();
+    const buf = await file.arrayBuffer();
+    const imageAsset = toSourceImageAssetRecord(buf, file.type || 'image/png', file.name);
+    const referenceImage: ReferenceImage = {
+      id: generateId('ref'),
+      assetId: imageAsset.id,
+      name: file.name,
+      position: [0, 0, 0],
+      rotation: [0, 0, 0, 1],
+      scale: [1, aspect, 1],
+      opacity: 1,
+      visible: true,
+      locked: false,
+    };
+    this.history.execute(new CreateReferenceImageCommand(this.referenceImages, this.assets, imageAsset, referenceImage));
+    this.selectReferenceImage(referenceImage.id);
+  }
+
+  /** The one mutual-exclusion chokepoint between SceneObject selection and reference-image
+   * selection — a ReferenceImage is never a SceneObject, so the two selections can't overlap. */
+  selectReferenceImage(id: string | null): void {
+    this.state.selectedReferenceImageId.set(id);
+  }
+
+  renameReferenceImage(id: string, name: string): void {
+    this.referenceImages.update(id, { name });
+  }
+
+  setReferenceImageOpacity(id: string, opacity: number): void {
+    this.referenceImages.update(id, { opacity });
+  }
+
+  toggleReferenceImageVisible(id: string): void {
+    const ref = this.referenceImages.get(id);
+    if (!ref) return;
+    this.referenceImages.update(id, { visible: !ref.visible });
+  }
+
+  toggleReferenceImageLock(id: string): void {
+    const ref = this.referenceImages.get(id);
+    if (!ref) return;
+    this.referenceImages.update(id, { locked: !ref.locked });
+  }
+
+  deleteReferenceImage(id: string): void {
+    this.history.execute(new DeleteReferenceImageCommand(this.referenceImages, this.assets, id));
+    if (this.state.selectedReferenceImageId.get() === id) this.state.selectedReferenceImageId.set(null);
   }
 
   // --- Selection-driven actions -------------------------------------------------
@@ -330,8 +404,18 @@ export class App {
 
     dom.addEventListener('pointerdown', (ev) => {
       if (ev.button !== 0 || this.gizmo.isDragging) return;
-      const id = this.raycaster.pick(ev, dom, this.viewport.camera.instance, this.viewport.sceneManager.objectRoot);
-      this.selection.handlePointerPick(id, { shift: ev.shiftKey, ctrl: ev.ctrlKey || ev.metaKey });
+      const objectId = this.raycaster.pick(ev, dom, this.viewport.camera.instance, this.viewport.sceneManager.objectRoot);
+      if (objectId) {
+        this.selection.handlePointerPick(objectId, { shift: ev.shiftKey, ctrl: ev.ctrlKey || ev.metaKey });
+        return;
+      }
+      const refId = this.raycaster.pick(ev, dom, this.viewport.camera.instance, this.referenceImageVisualizer.getGroup());
+      if (refId && !this.referenceImages.get(refId)?.locked) {
+        this.selectReferenceImage(refId);
+        return;
+      }
+      this.selection.handlePointerPick(null, { shift: ev.shiftKey, ctrl: ev.ctrlKey || ev.metaKey });
+      if (!ev.shiftKey && !ev.ctrlKey && !ev.metaKey) this.state.selectedReferenceImageId.set(null);
     });
 
     window.addEventListener('keydown', (ev) => {
@@ -343,6 +427,20 @@ export class App {
     });
 
     this.state.selection.subscribe((ids) => this.attachGizmoToSelection(this.selectableIds(ids)));
+    // Reference-image selection is mutually exclusive with SceneObject selection (a ReferenceImage
+    // is never a SceneObject, so it can't share `state.selection`) — whichever becomes non-empty
+    // clears the other, from whatever call site triggered the change.
+    this.state.selection.subscribe((ids) => { if (ids.length && this.state.selectedReferenceImageId.get()) this.state.selectedReferenceImageId.set(null); });
+    this.state.selectedReferenceImageId.subscribe((id) => {
+      if (id) {
+        if (this.state.selection.get().length) this.selection.clear();
+        const obj3d = this.referenceImageVisualizer.getObject3D(id);
+        if (obj3d) this.gizmo.attach(obj3d);
+        else this.gizmo.detach();
+      } else if (!this.state.selection.get().length) {
+        this.gizmo.detach();
+      }
+    });
     // Undo/redo (and any other history-driven mutation) can remove or reparent the object the
     // gizmo is currently attached to without changing `selection` itself — re-validate the
     // attachment against live objects every time, or TransformControls errors every frame
@@ -352,6 +450,9 @@ export class App {
       const ids = this.state.selection.get();
       if (ids.includes(objectId)) this.selection.set(ids.filter((id) => id !== objectId));
       this.assembly.removeAllForObject(objectId);
+    });
+    this.bus.on('referenceImage:removed', ({ referenceImageId }) => {
+      if (this.state.selectedReferenceImageId.get() === referenceImageId) this.state.selectedReferenceImageId.set(null);
     });
 
     this.state.activeTool.subscribe((tool) => {
@@ -380,6 +481,12 @@ export class App {
   }
 
   private captureBefore(ids: string[]): void {
+    const refId = this.state.selectedReferenceImageId.get();
+    if (refId) {
+      const ref = this.referenceImages.get(refId);
+      this.refDragBefore = ref ? { position: [...ref.position], rotation: [...ref.rotation], scale: [...ref.scale] } : null;
+      return;
+    }
     this.dragBefore.clear();
     for (const id of ids) {
       const obj = this.objects.getOrThrow(id);
@@ -389,6 +496,17 @@ export class App {
   }
 
   private applyGizmoChange(): void {
+    const refId = this.state.selectedReferenceImageId.get();
+    if (refId) {
+      const object3D = this.referenceImageVisualizer.getObject3D(refId);
+      if (!object3D) return;
+      this.referenceImages.update(refId, {
+        position: [object3D.position.x, object3D.position.y, object3D.position.z],
+        rotation: [object3D.quaternion.x, object3D.quaternion.y, object3D.quaternion.z, object3D.quaternion.w],
+        scale: [object3D.scale.x, object3D.scale.y, object3D.scale.z],
+      });
+      return;
+    }
     const ids = this.selectableIds(this.state.selection.get());
     if (ids.length === 1) {
       const object3D = this.sceneSync.getObject3D(ids[0]);
@@ -404,6 +522,18 @@ export class App {
   }
 
   private commitDrag(): void {
+    const refId = this.state.selectedReferenceImageId.get();
+    if (refId) {
+      const ref = this.referenceImages.get(refId);
+      if (ref && this.refDragBefore) {
+        const after: ReferenceImageTransform = { position: [...ref.position], rotation: [...ref.rotation], scale: [...ref.scale] };
+        if (JSON.stringify(this.refDragBefore) !== JSON.stringify(after)) {
+          this.history.record(new TransformReferenceImageCommand(this.referenceImages, refId, this.refDragBefore, after, `Transformed ${ref.name}`));
+        }
+      }
+      this.refDragBefore = null;
+      return;
+    }
     const deltas: TransformDelta[] = [];
     for (const [id, before] of this.dragBefore) {
       const obj = this.objects.get(id);

@@ -3,6 +3,7 @@ import type { ObjectManager } from '../core/ObjectManager';
 import type { MaterialManager } from '../3d/MaterialManager';
 import type { AssemblyManager } from '../editor/AssemblyManager';
 import type { AssetManager } from '../3d/AssetManager';
+import type { ReferenceImageManager } from '../editor/ReferenceImageManager';
 import type { AppState } from '../core/AppState';
 import type { ProjectMeta } from '../core/types';
 import { Serializer } from './Serializer';
@@ -13,6 +14,7 @@ export interface LiveScene {
   materials: MaterialManager;
   assembly: AssemblyManager;
   assets: AssetManager;
+  referenceImages: ReferenceImageManager;
   state: AppState;
 }
 
@@ -31,7 +33,7 @@ export class ProjectRepository {
     if (!meta) throw new Error('No current project to save');
     meta.updatedAt = new Date().toISOString();
     scene.state.currentProject.set({ ...meta });
-    const snapshot = Serializer.capture(scene.objects, scene.materials, scene.assembly, scene.assets);
+    const snapshot = Serializer.capture(scene.objects, scene.materials, scene.assembly, scene.assets, scene.referenceImages);
     await this.db.saveProject(meta, snapshot.components, snapshot.materials, snapshot.assemblies, snapshot.assets, snapshot.referenceImages);
     scene.state.dirty.set(false);
   }
@@ -47,7 +49,7 @@ export class ProjectRepository {
   async open(scene: LiveScene, projectId: string): Promise<boolean> {
     const record = await this.db.loadProject(projectId);
     if (!record) return false;
-    Serializer.apply(scene.objects, scene.materials, scene.assembly, scene.assets, record);
+    Serializer.apply(scene.objects, scene.materials, scene.assembly, scene.assets, scene.referenceImages, record);
     scene.state.currentProject.set(record.meta);
     scene.state.dirty.set(false);
     return true;
