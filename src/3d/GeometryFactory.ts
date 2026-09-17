@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import type { GeometryDefinition, GeometryType } from '../core/types';
+import type { AssetManager } from './AssetManager';
 
 type Builder = (params: Record<string, number>) => THREE.BufferGeometry;
 
-const builders: Record<GeometryType, Builder> = {
+const builders: Record<Exclude<GeometryType, 'imported'>, Builder> = {
   box: (p) => new THREE.BoxGeometry(p.width ?? 1, p.height ?? 1, p.depth ?? 1),
   sphere: (p) => new THREE.SphereGeometry(p.radius ?? 0.5, p.widthSegments ?? 24, p.heightSegments ?? 16),
   cylinder: (p) =>
@@ -14,7 +15,7 @@ const builders: Record<GeometryType, Builder> = {
   torus: (p) => new THREE.TorusGeometry(p.radius ?? 0.5, p.tube ?? 0.15, p.radialSegments ?? 16, p.tubularSegments ?? 32),
 };
 
-export const GEOMETRY_DEFAULT_PARAMS: Record<GeometryType, Record<string, number>> = {
+export const GEOMETRY_DEFAULT_PARAMS: Record<Exclude<GeometryType, 'imported'>, Record<string, number>> = {
   box: { width: 1, height: 1, depth: 1 },
   sphere: { radius: 0.5, widthSegments: 24, heightSegments: 16 },
   cylinder: { radiusTop: 0.5, radiusBottom: 0.5, height: 1, radialSegments: 20 },
@@ -26,9 +27,17 @@ export const GEOMETRY_DEFAULT_PARAMS: Record<GeometryType, Record<string, number
 
 export const GEOMETRY_TYPES: GeometryType[] = ['box', 'sphere', 'cylinder', 'cone', 'capsule', 'plane', 'torus'];
 
-/** Registry mapping geometry type -> THREE.BufferGeometry builder. Extend by adding a new type + builder. */
+/** Registry mapping geometry type -> THREE.BufferGeometry builder. Extend by adding a new type + builder.
+ * 'imported' (from Import/Image->3D) is not a primitive builder — it resolves through AssetManager instead. */
 export class GeometryFactory {
+  constructor(private assets?: AssetManager) {}
+
   create(def: GeometryDefinition): THREE.BufferGeometry {
+    if (def.type === 'imported') {
+      if (!def.assetId) throw new Error('Imported geometry is missing its assetId');
+      if (!this.assets) throw new Error('GeometryFactory has no AssetManager to resolve imported geometry');
+      return this.assets.getGeometry(def.assetId);
+    }
     const build = builders[def.type];
     if (!build) throw new Error(`Unknown geometry type: ${def.type}`);
     const geo = build(def.params);
@@ -37,7 +46,7 @@ export class GeometryFactory {
     return geo;
   }
 
-  defaultDefinition(type: GeometryType): GeometryDefinition {
+  defaultDefinition(type: Exclude<GeometryType, 'imported'>): GeometryDefinition {
     return { type, params: { ...GEOMETRY_DEFAULT_PARAMS[type] } };
   }
 }

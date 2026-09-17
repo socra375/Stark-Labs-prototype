@@ -2,6 +2,7 @@ import type { IStorageAdapter } from './StorageAdapter';
 import type { ObjectManager } from '../core/ObjectManager';
 import type { MaterialManager } from '../3d/MaterialManager';
 import type { AssemblyManager } from '../editor/AssemblyManager';
+import type { AssetManager } from '../3d/AssetManager';
 import type { AppState } from '../core/AppState';
 import type { ProjectMeta } from '../core/types';
 import { Serializer } from './Serializer';
@@ -11,6 +12,7 @@ export interface LiveScene {
   objects: ObjectManager;
   materials: MaterialManager;
   assembly: AssemblyManager;
+  assets: AssetManager;
   state: AppState;
 }
 
@@ -29,8 +31,8 @@ export class ProjectRepository {
     if (!meta) throw new Error('No current project to save');
     meta.updatedAt = new Date().toISOString();
     scene.state.currentProject.set({ ...meta });
-    const snapshot = Serializer.capture(scene.objects, scene.materials, scene.assembly);
-    await this.db.saveProject(meta, snapshot.components, snapshot.materials, snapshot.assemblies);
+    const snapshot = Serializer.capture(scene.objects, scene.materials, scene.assembly, scene.assets);
+    await this.db.saveProject(meta, snapshot.components, snapshot.materials, snapshot.assemblies, snapshot.assets, snapshot.referenceImages);
     scene.state.dirty.set(false);
   }
 
@@ -45,7 +47,7 @@ export class ProjectRepository {
   async open(scene: LiveScene, projectId: string): Promise<boolean> {
     const record = await this.db.loadProject(projectId);
     if (!record) return false;
-    Serializer.apply(scene.objects, scene.materials, scene.assembly, record);
+    Serializer.apply(scene.objects, scene.materials, scene.assembly, scene.assets, record);
     scene.state.currentProject.set(record.meta);
     scene.state.dirty.set(false);
     return true;
@@ -55,7 +57,7 @@ export class ProjectRepository {
     const record = await this.db.loadProject(projectId);
     if (!record) return null;
     const meta = this.createMeta(newName, record.meta.description, record.meta.template);
-    await this.db.saveProject(meta, record.components, record.materials, record.assemblies);
+    await this.db.saveProject(meta, record.components, record.materials, record.assemblies, record.assets, record.referenceImages);
     return meta;
   }
 
@@ -63,7 +65,7 @@ export class ProjectRepository {
     const record = await this.db.loadProject(projectId);
     if (!record) return;
     const meta = { ...record.meta, name: newName, updatedAt: new Date().toISOString() };
-    await this.db.saveProject(meta, record.components, record.materials, record.assemblies);
+    await this.db.saveProject(meta, record.components, record.materials, record.assemblies, record.assets, record.referenceImages);
   }
 
   async remove(projectId: string): Promise<void> {

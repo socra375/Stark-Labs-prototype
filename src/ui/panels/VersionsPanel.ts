@@ -77,7 +77,7 @@ export function createVersionsPanel(app: App): HTMLElement {
   }
 
   function showDiff(version: ProjectVersion): void {
-    const current = Serializer.capture(app.objects, app.materials, app.assembly);
+    const current = Serializer.capture(app.objects, app.materials, app.assembly, app.assets);
     const diff = diffSnapshots(version.snapshot, current);
     diffResult.innerHTML = '';
     const lines = [

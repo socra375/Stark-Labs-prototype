@@ -3,6 +3,7 @@ import { ObjectManager } from './ObjectManager';
 import { AppState } from './AppState';
 import { Viewport } from '../3d/Viewport';
 import { MaterialManager } from '../3d/MaterialManager';
+import { AssetManager } from '../3d/AssetManager';
 import { SceneSync } from '../3d/SceneSync';
 import { CoordinateSystem } from '../3d/CoordinateSystem';
 import { TransformGizmo } from '../3d/TransformGizmo';
@@ -49,6 +50,7 @@ export class App {
   readonly state = new AppState();
   readonly objects = new ObjectManager(this.bus);
   readonly materials = new MaterialManager(this.bus);
+  readonly assets = new AssetManager();
   readonly viewport: Viewport;
   readonly sceneSync: SceneSync;
   readonly coords: CoordinateSystem;
@@ -77,7 +79,7 @@ export class App {
 
   constructor(container: HTMLElement) {
     this.viewport = new Viewport(container);
-    this.sceneSync = new SceneSync(this.bus, this.objects, this.materials, this.viewport.sceneManager.objectRoot);
+    this.sceneSync = new SceneSync(this.bus, this.objects, this.materials, this.viewport.sceneManager.objectRoot, this.assets);
     this.coords = new CoordinateSystem(this.objects);
     this.selection = new SelectionManager(this.bus, this.state, this.objects);
     this.inspector = new Inspector(this.bus, this.state, this.objects);
@@ -123,13 +125,14 @@ export class App {
   // --- Project lifecycle -----------------------------------------------------
 
   liveScene(): LiveScene {
-    return { objects: this.objects, materials: this.materials, assembly: this.assembly, state: this.state };
+    return { objects: this.objects, materials: this.materials, assembly: this.assembly, assets: this.assets, state: this.state };
   }
 
   newProject(name: string, description: string, templateId: string): ProjectMeta {
     const meta = this.projectRepo.createMeta(name, description, templateId);
     const { components, materials } = getTemplate(templateId).build();
     this.materials.loadAll(materials);
+    this.assets.clear();
     this.objects.loadAll(components);
     this.assembly.clear();
     this.history.clear();
@@ -236,6 +239,7 @@ export class App {
       childObjectId: b,
       connectionPointA: [0, 0, 0],
       connectionPointB: [0, 0, 0],
+      type: 'FIXED',
       createdAt: new Date().toISOString(),
     };
     this.history.execute(new ConnectCommand(this.assembly, connection));

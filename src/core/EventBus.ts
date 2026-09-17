@@ -13,6 +13,7 @@ export interface EventMap {
   'history:changed': {};
   'material:updated': { materialId: string };
   'assembly:created': { connection: Connection };
+  'assembly:updated': { connection: Connection };
   'assembly:removed': { connectionId: string };
   'version:created': { versionId: string };
   'version:restored': { versionId: string };

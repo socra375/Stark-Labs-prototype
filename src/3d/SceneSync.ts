@@ -4,6 +4,7 @@ import type { ObjectManager } from '../core/ObjectManager';
 import type { SceneObject } from '../core/types';
 import { MeshFactory } from './MeshFactory';
 import type { MaterialManager } from './MaterialManager';
+import type { AssetManager } from './AssetManager';
 
 /** Two-way sync seam: mirrors the ObjectManager model into live Object3D instances under sceneRoot. */
 export class SceneSync {
@@ -15,8 +16,9 @@ export class SceneSync {
     private objects: ObjectManager,
     materials: MaterialManager,
     private sceneRoot: THREE.Group,
+    assets?: AssetManager,
   ) {
-    this.meshFactory = new MeshFactory(materials);
+    this.meshFactory = new MeshFactory(materials, assets);
     this.bus.on('object:created', ({ object }) => this.mount(object));
     this.bus.on('object:updated', ({ objectId, patch }) => this.applyPatch(objectId, patch));
     this.bus.on('object:removed', ({ objectId }) => this.unmount(objectId));

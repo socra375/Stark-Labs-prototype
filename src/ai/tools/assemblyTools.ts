@@ -29,6 +29,7 @@ export const connectObjectsTool: AITool = {
       childObjectId: args.objectIdB as string,
       connectionPointA: [0, 0, 0],
       connectionPointB: [0, 0, 0],
+      type: 'FIXED',
       createdAt: new Date().toISOString(),
     };
     return new ConnectCommand(ctx.assembly, connection);

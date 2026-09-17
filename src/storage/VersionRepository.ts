@@ -16,7 +16,7 @@ export class VersionRepository {
       projectId,
       name,
       createdAt: new Date().toISOString(),
-      snapshot: Serializer.capture(scene.objects, scene.materials, scene.assembly),
+      snapshot: Serializer.capture(scene.objects, scene.materials, scene.assembly, scene.assets),
     };
     await this.db.saveVersion(version);
     this.bus?.emit('version:created', { versionId: version.id });
@@ -28,7 +28,7 @@ export class VersionRepository {
   }
 
   async restore(scene: LiveScene, version: ProjectVersion): Promise<void> {
-    Serializer.apply(scene.objects, scene.materials, scene.assembly, version.snapshot);
+    Serializer.apply(scene.objects, scene.materials, scene.assembly, scene.assets, version.snapshot);
     scene.state.dirty.set(true);
     this.bus?.emit('version:restored', { versionId: version.id });
   }

@@ -1,5 +1,5 @@
 import type { EventBus } from '../core/EventBus';
-import type { Connection, Vec3 } from '../core/types';
+import type { Connection, ConnectionType, Vec3 } from '../core/types';
 import { generateId } from '../utils/ids';
 
 /**
@@ -14,13 +14,14 @@ export class AssemblyManager {
 
   constructor(private bus: EventBus) {}
 
-  connect(parentObjectId: string, childObjectId: string, pointA: Vec3 = [0, 0, 0], pointB: Vec3 = [0, 0, 0]): Connection {
+  connect(parentObjectId: string, childObjectId: string, type: ConnectionType = 'FIXED', pointA: Vec3 = [0, 0, 0], pointB: Vec3 = [0, 0, 0]): Connection {
     const connection: Connection = {
       id: generateId('conn'),
       parentObjectId,
       childObjectId,
       connectionPointA: pointA,
       connectionPointB: pointB,
+      type,
       createdAt: new Date().toISOString(),
     };
     this.connections.set(connection.id, connection);
@@ -31,6 +32,14 @@ export class AssemblyManager {
   insert(connection: Connection): void {
     this.connections.set(connection.id, connection);
     this.bus.emit('assembly:created', { connection });
+  }
+
+  /** No physical solver runs on `type` yet (see SimulationEngine) — it's real, stored data for a future one. */
+  setType(connectionId: string, type: ConnectionType): void {
+    const connection = this.connections.get(connectionId);
+    if (!connection) return;
+    connection.type = type;
+    this.bus.emit('assembly:updated', { connection });
   }
 
   disconnect(connectionId: string): void {
