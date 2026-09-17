@@ -1,4 +1,5 @@
 import type { App } from '../../core/App';
+import { openImageTo3DWorkspace } from '../screens/ImageTo3DWorkspace';
 
 export function createHeader(app: App): HTMLElement {
   const root = document.createElement('div');
@@ -36,6 +37,13 @@ export function createHeader(app: App): HTMLElement {
   app.state.currentProject.subscribe(updateImportBtn, true);
   app.state.importing.subscribe(updateImportBtn, true);
 
+  const imageTo3DBtn = document.createElement('button');
+  imageTo3DBtn.className = 'btn';
+  imageTo3DBtn.style.cssText = 'padding:4px 10px;font-size:11px;';
+  imageTo3DBtn.textContent = 'Image → 3D';
+  imageTo3DBtn.addEventListener('click', () => openImageTo3DWorkspace(app));
+  app.state.currentProject.subscribe((p) => { imageTo3DBtn.disabled = !p; }, true);
+
   const exportBtn = document.createElement('button');
   exportBtn.className = 'btn';
   exportBtn.style.cssText = 'padding:4px 10px;font-size:11px;';
@@ -49,7 +57,7 @@ export function createHeader(app: App): HTMLElement {
   projectsBtn.textContent = 'Projects';
   projectsBtn.addEventListener('click', () => app.state.screen.set('landing'));
 
-  right.append(projectName, importModelBtn, exportBtn, projectsBtn);
+  right.append(projectName, importModelBtn, imageTo3DBtn, exportBtn, projectsBtn);
   root.append(brand, right);
   return root;
 }

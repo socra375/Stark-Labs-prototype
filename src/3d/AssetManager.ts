@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { AssetRecord, AssetKind } from '../core/types';
 import { generateId } from '../utils/ids';
 
-function arrayBufferToBase64(buf: ArrayBuffer): string {
+export function arrayBufferToBase64(buf: ArrayBuffer): string {
   let binary = '';
   const bytes = new Uint8Array(buf);
   const chunk = 0x8000;

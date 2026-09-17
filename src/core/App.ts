@@ -34,7 +34,12 @@ import { getTemplate } from '../templates/TemplateRegistry';
 import { exportProject, importProjectFromPicker } from '../storage/StarkFileFormat';
 import { importModelFile } from '../3d/import/ModelImporter';
 import { ImportCommand } from '../editor/commands/ImportCommand';
+import { toGeometryAssetRecord, defaultCustomMaterial } from '../3d/import/ImportShared';
 import { pickFile } from '../utils/download';
+import { ReconstructionService } from '../reconstruction/ReconstructionService';
+import { toSourceImageAssetRecord } from '../reconstruction/ReconstructionAssets';
+import { ReconstructionCommitCommand } from '../editor/commands/ReconstructionCommitCommand';
+import type { ReconstructionMode, ReconstructionPreview } from '../reconstruction/types';
 import { AIService } from '../ai/AIService';
 import { ToolRegistry } from '../ai/ToolRegistry';
 import { ToolParser } from '../ai/ToolParser';
@@ -45,7 +50,7 @@ import { AICommandExecutor } from '../ai/AICommandExecutor';
 import { AnalysisEngine } from '../ai/AnalysisEngine';
 import { SimulationEngine } from '../simulation/SimulationEngine';
 import { BotManager } from '../bots/BotManager';
-import type { Vec3, Connection, ProjectMeta } from './types';
+import type { Vec3, Connection, ProjectMeta, SceneObject } from './types';
 
 /** Top-level orchestrator wiring core managers, the 3D viewport, and app state together. */
 export class App {
@@ -72,6 +77,7 @@ export class App {
   readonly historyRepo: HistoryRepository;
   readonly autosave: AutosaveService;
   readonly ai = new AIService();
+  readonly reconstruction = new ReconstructionService();
   readonly aiTools = new ToolRegistry();
   readonly aiExecutor: AICommandExecutor;
   readonly analysisEngine: AnalysisEngine;
@@ -195,6 +201,50 @@ export class App {
     } finally {
       this.state.importing.set(false);
     }
+  }
+
+  /** Runs the active reconstruction engine's non-mutating preview stage (decode/segment/depth/
+   * point-cloud) — the live scene is untouched until commitReconstruction() is called separately. */
+  async previewReconstruction(file: File, mode: ReconstructionMode = 'ONE_IMAGE'): Promise<ReconstructionPreview> {
+    return this.reconstruction.active.preview({ mode, images: [file] });
+  }
+
+  /** Commits a reconstruction: re-runs the deterministic pipeline (cheap enough to not bother
+   * caching the preview's intermediates) through to a real BufferGeometry, then applies it as one
+   * normal, editable SceneObject via ReconstructionCommitCommand — transform/material/undo/save/
+   * export/join/separate/mirror all work on it exactly like any other mesh from here on. */
+  async commitReconstruction(file: File, mode: ReconstructionMode = 'ONE_IMAGE'): Promise<void> {
+    const result = await this.reconstruction.active.generate({ mode, images: [file] });
+    const buf = await file.arrayBuffer();
+    const sourceImageAsset = toSourceImageAssetRecord(buf, file.type || 'image/png', file.name);
+    const geometryAsset = toGeometryAssetRecord(result.geometry, 'Reconstruction Geometry (Estimated)');
+    const material = defaultCustomMaterial('Reconstruction Material (Estimated)');
+    const object: SceneObject = {
+      id: generateId('mesh'),
+      name: 'Reconstruction (Estimated)',
+      type: 'mesh',
+      geometry: { type: 'imported', params: {}, assetId: geometryAsset.id },
+      material: material.id,
+      position: [0, 0, 0],
+      rotation: [0, 0, 0],
+      scale: [1, 1, 1],
+      parentId: null,
+      children: [],
+      visible: true,
+      locked: false,
+      metadata: {
+        origin: 'reconstruction',
+        reconstruction: {
+          estimated: true,
+          sourceImageAssetId: sourceImageAsset.id,
+          method: result.method,
+          componentDetection: result.componentDetection,
+        },
+      },
+    };
+    const cmd = new ReconstructionCommitCommand(this.objects, this.materials, this.assets, { sourceImageAsset, geometryAsset, material, object });
+    this.history.execute(cmd);
+    this.selection.set([object.id]);
   }
 
   // --- Selection-driven actions -------------------------------------------------
