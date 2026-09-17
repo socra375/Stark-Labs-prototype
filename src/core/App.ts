@@ -24,7 +24,12 @@ import { AssemblyVisualizer } from '../3d/AssemblyVisualizer';
 import { ConnectCommand } from '../editor/commands/ConnectCommand';
 import { DisconnectCommand } from '../editor/commands/DisconnectCommand';
 import { generateId } from '../utils/ids';
-import type { Vec3, Connection } from './types';
+import { Database } from '../storage/Database';
+import { ProjectRepository, type LiveScene } from '../storage/ProjectRepository';
+import { VersionRepository } from '../storage/VersionRepository';
+import { HistoryRepository } from '../storage/HistoryRepository';
+import { AutosaveService } from '../storage/AutosaveService';
+import type { Vec3, Connection, ProjectMeta } from './types';
 
 /** Top-level orchestrator wiring core managers, the 3D viewport, and app state together. */
 export class App {
@@ -44,6 +49,11 @@ export class App {
   readonly mirror: MirrorTool;
   readonly assembly: AssemblyManager;
   readonly assemblyVisualizer: AssemblyVisualizer;
+  readonly db = new Database();
+  readonly projectRepo: ProjectRepository;
+  readonly versionRepo: VersionRepository;
+  readonly historyRepo: HistoryRepository;
+  readonly autosave: AutosaveService;
   private pivot: GroupTransformPivot;
   private dragBefore: Map<string, TransformDelta['before']> = new Map();
 
@@ -58,6 +68,10 @@ export class App {
     this.mirror = new MirrorTool(this.objects, this.coords);
     this.assembly = new AssemblyManager(this.bus);
     this.assemblyVisualizer = new AssemblyVisualizer(this.bus, this.assembly, this.coords, this.viewport.sceneManager.scene);
+    this.projectRepo = new ProjectRepository(this.db);
+    this.versionRepo = new VersionRepository(this.db);
+    this.historyRepo = new HistoryRepository(this.db);
+    this.autosave = new AutosaveService(this.bus, this.projectRepo, this.liveScene());
     this.pivot = new GroupTransformPivot(this.objects, this.coords, this.viewport.sceneManager.scene);
     this.gizmo = new TransformGizmo(
       this.viewport.camera.instance,
@@ -66,6 +80,41 @@ export class App {
       (enabled) => this.viewport.controls.setEnabled(enabled),
     );
     this.wireInteraction();
+  }
+
+  // --- Project lifecycle -----------------------------------------------------
+
+  liveScene(): LiveScene {
+    return { objects: this.objects, materials: this.materials, assembly: this.assembly, state: this.state };
+  }
+
+  newProject(name: string, description: string, template: string): ProjectMeta {
+    const meta = this.projectRepo.createMeta(name, description, template);
+    this.objects.clear();
+    this.materials.clear();
+    this.assembly.clear();
+    this.history.clear();
+    this.selection.clear();
+    this.state.currentProject.set(meta);
+    this.state.dirty.set(false);
+    return meta;
+  }
+
+  async saveProject(): Promise<void> {
+    await this.projectRepo.save(this.liveScene());
+  }
+
+  async saveProjectAs(newName: string): Promise<ProjectMeta> {
+    return this.projectRepo.saveAs(this.liveScene(), newName);
+  }
+
+  async openProject(projectId: string): Promise<boolean> {
+    const ok = await this.projectRepo.open(this.liveScene(), projectId);
+    if (ok) {
+      this.history.clear();
+      this.selection.clear();
+    }
+    return ok;
   }
 
   // --- Selection-driven actions -------------------------------------------------
