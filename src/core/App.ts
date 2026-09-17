@@ -29,6 +29,7 @@ import { ProjectRepository, type LiveScene } from '../storage/ProjectRepository'
 import { VersionRepository } from '../storage/VersionRepository';
 import { HistoryRepository } from '../storage/HistoryRepository';
 import { AutosaveService } from '../storage/AutosaveService';
+import { getTemplate } from '../templates/TemplateRegistry';
 import type { Vec3, Connection, ProjectMeta } from './types';
 
 /** Top-level orchestrator wiring core managers, the 3D viewport, and app state together. */
@@ -88,15 +89,20 @@ export class App {
     return { objects: this.objects, materials: this.materials, assembly: this.assembly, state: this.state };
   }
 
-  newProject(name: string, description: string, template: string): ProjectMeta {
-    const meta = this.projectRepo.createMeta(name, description, template);
-    this.objects.clear();
-    this.materials.clear();
+  newProject(name: string, description: string, templateId: string): ProjectMeta {
+    const meta = this.projectRepo.createMeta(name, description, templateId);
+    const { components, materials } = getTemplate(templateId).build();
+    this.materials.loadAll(materials);
+    this.objects.loadAll(components);
     this.assembly.clear();
     this.history.clear();
     this.selection.clear();
     this.state.currentProject.set(meta);
     this.state.dirty.set(false);
+    // loadAll()-based template seeding never fires 'project:dirty' (it's a bulk load, not an
+    // edit), so autosave alone would leave a brand-new project unsaved until the user's first
+    // manual change — persist immediately so it shows up in Recent Projects right away.
+    void this.saveProject();
     return meta;
   }
 
