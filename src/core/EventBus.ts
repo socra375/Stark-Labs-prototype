@@ -14,6 +14,8 @@ export interface EventMap {
   'material:updated': { materialId: string };
   'assembly:created': { connection: Connection };
   'assembly:removed': { connectionId: string };
+  'version:created': { versionId: string };
+  'version:restored': { versionId: string };
   'project:dirty': {};
   'project:saved': { projectId: string };
 }

@@ -19,7 +19,7 @@ function divider(): HTMLElement {
   return el;
 }
 
-export function createBottomToolbar(app: App, extra: HTMLElement[] = []): HTMLElement {
+export function createBottomToolbar(app: App, extra: HTMLElement[] = [], onAIClick?: () => void): HTMLElement {
   const root = document.createElement('div');
   root.className = 'bottom-toolbar';
 
@@ -108,6 +108,13 @@ export function createBottomToolbar(app: App, extra: HTMLElement[] = []): HTMLEl
   refreshHistoryButtons();
 
   root.append(undoBtn, redoBtn);
+  root.appendChild(divider());
+
+  const aiBtn = document.createElement('button');
+  aiBtn.className = 'btn';
+  aiBtn.textContent = 'AI';
+  aiBtn.addEventListener('click', () => onAIClick?.());
+  root.appendChild(aiBtn);
 
   const spacer = document.createElement('div');
   spacer.className = 'spacer';

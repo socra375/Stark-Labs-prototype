@@ -31,6 +31,14 @@ import { HistoryRepository } from '../storage/HistoryRepository';
 import { AutosaveService } from '../storage/AutosaveService';
 import { getTemplate } from '../templates/TemplateRegistry';
 import { exportProject, importProjectFromPicker } from '../storage/StarkFileFormat';
+import { AIService } from '../ai/AIService';
+import { ToolRegistry } from '../ai/ToolRegistry';
+import { ToolParser } from '../ai/ToolParser';
+import { ToolValidator } from '../ai/ToolValidator';
+import { PermissionValidator } from '../ai/PermissionValidator';
+import { PreviewGenerator } from '../ai/PreviewGenerator';
+import { AICommandExecutor } from '../ai/AICommandExecutor';
+import { AnalysisEngine } from '../ai/AnalysisEngine';
 import type { Vec3, Connection, ProjectMeta } from './types';
 
 /** Top-level orchestrator wiring core managers, the 3D viewport, and app state together. */
@@ -56,6 +64,10 @@ export class App {
   readonly versionRepo: VersionRepository;
   readonly historyRepo: HistoryRepository;
   readonly autosave: AutosaveService;
+  readonly ai = new AIService();
+  readonly aiTools = new ToolRegistry();
+  readonly aiExecutor: AICommandExecutor;
+  readonly analysisEngine: AnalysisEngine;
   private pivot: GroupTransformPivot;
   private dragBefore: Map<string, TransformDelta['before']> = new Map();
 
@@ -71,9 +83,28 @@ export class App {
     this.assembly = new AssemblyManager(this.bus);
     this.assemblyVisualizer = new AssemblyVisualizer(this.bus, this.assembly, this.coords, this.viewport.sceneManager.scene);
     this.projectRepo = new ProjectRepository(this.db);
-    this.versionRepo = new VersionRepository(this.db);
+    this.versionRepo = new VersionRepository(this.db, this.bus);
     this.historyRepo = new HistoryRepository(this.db);
     this.autosave = new AutosaveService(this.bus, this.projectRepo, this.liveScene());
+    this.analysisEngine = new AnalysisEngine(this.objects, this.assembly, this.coords);
+    this.aiExecutor = new AICommandExecutor(
+      this.aiTools,
+      new ToolParser(this.objects),
+      new ToolValidator(this.aiTools),
+      new PermissionValidator(this.aiTools),
+      new PreviewGenerator(this.aiTools),
+      {
+        objects: this.objects,
+        materials: this.materials,
+        assembly: this.assembly,
+        coords: this.coords,
+        mirror: this.mirror,
+        grouping: this.grouping,
+        history: this.history,
+        versionRepo: this.versionRepo,
+        scene: this.liveScene(),
+      },
+    );
     this.pivot = new GroupTransformPivot(this.objects, this.coords, this.viewport.sceneManager.scene);
     this.gizmo = new TransformGizmo(
       this.viewport.camera.instance,

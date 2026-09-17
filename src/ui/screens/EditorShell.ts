@@ -7,6 +7,8 @@ import { createMaterialsPanel } from '../panels/MaterialsPanel';
 import { createAssembliesPanel } from '../panels/AssembliesPanel';
 import { createVersionsPanel } from '../panels/VersionsPanel';
 import { createActivityLogPanel } from '../panels/ActivityLogPanel';
+import { createAIChatPanel } from '../panels/AIChatPanel';
+import { createAIAnalysisPanel } from '../panels/AIAnalysisPanel';
 import { createLandingScreen } from './LandingScreen';
 
 export function mountEditorShell(root: HTMLElement): App {
@@ -34,12 +36,18 @@ export function mountEditorShell(root: HTMLElement): App {
 
   shell.insertBefore(header(app), shell.firstChild);
   left.appendChild(createLeftPanel(app));
+  const aiChat = createAIChatPanel(app);
+  left.appendChild(aiChat);
+  left.appendChild(createAIAnalysisPanel(app));
   right.appendChild(createInspectorPanel(app.inspector));
   right.appendChild(createMaterialsPanel(app));
   right.appendChild(createAssembliesPanel(app));
   right.appendChild(createVersionsPanel(app));
   right.appendChild(createActivityLogPanel(app));
-  shell.appendChild(createBottomToolbar(app));
+  shell.appendChild(createBottomToolbar(app, [], () => {
+    aiChat.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    aiChat.querySelector('input')?.focus();
+  }));
   shell.appendChild(createLandingScreen(app));
 
   return app;

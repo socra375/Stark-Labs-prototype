@@ -94,6 +94,8 @@ export function createVersionsPanel(app: App): HTMLElement {
   }
 
   app.state.currentProject.subscribe(render, true);
+  app.bus.on('version:created', render);
+  app.bus.on('version:restored', render);
 
   return root;
 }
