@@ -1,8 +1,14 @@
 import type { App } from '../../core/App';
 import type { SavedModel } from '../../core/types';
+import type { ModelSource } from '../../library/ModelSource';
+import { printablesSource } from '../../library/sources/PrintablesSource';
+import { thingiverseSource } from '../../library/sources/ThingiverseSource';
 
-/** Library: MY MODELS and MY PARTS are real; PRINTABLES/THINGIVERSE are real disabled
- * "Coming Soon" tabs (M21) — a future surface, honestly marked, never a fake populated tab. */
+type Section = 'model' | 'part' | 'printables' | 'thingiverse';
+
+/** Library: MY MODELS and MY PARTS are real, Dexie-backed collections. PRINTABLES/THINGIVERSE
+ * (M21) are real link-out panels backed by ModelSource — never a fake populated search-result
+ * list, since neither source's capabilities include search. */
 export function openLibraryScreen(app: App): void {
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop';
@@ -17,7 +23,7 @@ export function openLibraryScreen(app: App): void {
   title.className = 'modal-title';
   title.textContent = 'LIBRARY';
 
-  let activeKind: 'model' | 'part' = 'model';
+  let activeSection: Section = 'model';
 
   const tabsRow = document.createElement('div');
   tabsRow.style.cssText = 'display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;';
@@ -29,15 +35,15 @@ export function openLibraryScreen(app: App): void {
   myPartsTab.className = 'btn';
   myPartsTab.style.cssText = 'padding:4px 10px;font-size:11px;';
   myPartsTab.textContent = 'My Parts';
-  tabsRow.append(myModelsTab, myPartsTab);
-  for (const label of ['Printables', 'Thingiverse']) {
-    const btn = document.createElement('button');
-    btn.className = 'btn';
-    btn.style.cssText = 'padding:4px 10px;font-size:11px;';
-    btn.textContent = `${label} — Coming Soon`;
-    btn.disabled = true;
-    tabsRow.appendChild(btn);
-  }
+  const printablesTab = document.createElement('button');
+  printablesTab.className = 'btn';
+  printablesTab.style.cssText = 'padding:4px 10px;font-size:11px;';
+  printablesTab.textContent = 'Printables';
+  const thingiverseTab = document.createElement('button');
+  thingiverseTab.className = 'btn';
+  thingiverseTab.style.cssText = 'padding:4px 10px;font-size:11px;';
+  thingiverseTab.textContent = 'Thingiverse';
+  tabsRow.append(myModelsTab, myPartsTab, printablesTab, thingiverseTab);
 
   const saveRow = document.createElement('div');
   saveRow.style.cssText = 'display:flex;gap:6px;margin-bottom:12px;';
@@ -67,6 +73,34 @@ export function openLibraryScreen(app: App): void {
   const list = document.createElement('div');
   list.style.cssText = 'display:flex;flex-direction:column;gap:8px;';
 
+  // External-source (link-out only) panel — built once, contents refreshed per source.
+  const externalPanel = document.createElement('div');
+  externalPanel.style.cssText = 'display:none;flex-direction:column;gap:10px;';
+  const externalBadge = document.createElement('div');
+  externalBadge.style.cssText = 'font-size:10px;font-weight:700;letter-spacing:0.04em;color:var(--text-2);';
+  const externalNote = document.createElement('div');
+  externalNote.style.cssText = 'font-size:11px;color:var(--text-2);';
+  externalNote.textContent = 'This app never scrapes or fabricates search results — it only links out to the real site. Type an optional search term, then open the source in a new tab.';
+  const externalQueryRow = document.createElement('div');
+  externalQueryRow.style.cssText = 'display:flex;gap:6px;';
+  const externalQueryInput = document.createElement('input');
+  externalQueryInput.className = 'text-field mono';
+  externalQueryInput.style.cssText = 'flex:1;font-size:11px;padding:4px 6px;';
+  externalQueryInput.placeholder = 'Optional search term...';
+  const externalOpenBtn = document.createElement('button');
+  externalOpenBtn.className = 'btn active';
+  externalOpenBtn.style.cssText = 'padding:4px 10px;font-size:11px;white-space:nowrap;';
+  externalOpenBtn.textContent = 'Open Source Page';
+  externalQueryRow.append(externalQueryInput, externalOpenBtn);
+  externalPanel.append(externalBadge, externalNote, externalQueryRow);
+
+  let activeSource: ModelSource | null = null;
+  externalOpenBtn.addEventListener('click', () => {
+    if (!activeSource) return;
+    const url = activeSource.openSourceUrl(externalQueryInput.value);
+    window.open(url, '_blank', 'noopener,noreferrer');
+  });
+
   const buttons = document.createElement('div');
   buttons.className = 'modal-buttons';
   const closeBtn = document.createElement('button');
@@ -88,7 +122,7 @@ export function openLibraryScreen(app: App): void {
     if (!filtered.length) {
       const hint = document.createElement('div');
       hint.className = 'empty-hint';
-      hint.textContent = allModels.length ? 'No models match your search.' : `No saved ${activeKind === 'model' ? 'models' : 'parts'} yet.`;
+      hint.textContent = allModels.length ? 'No models match your search.' : `No saved ${activeSection === 'model' ? 'models' : 'parts'} yet.`;
       list.appendChild(hint);
       return;
     }
@@ -135,21 +169,38 @@ export function openLibraryScreen(app: App): void {
   }
 
   async function refresh(): Promise<void> {
-    allModels = await app.listLibraryModels(activeKind);
+    if (activeSection !== 'model' && activeSection !== 'part') return;
+    allModels = await app.listLibraryModels(activeSection);
     renderList();
   }
 
-  function setActiveTab(kind: 'model' | 'part'): void {
-    activeKind = kind;
-    myModelsTab.classList.toggle('active', kind === 'model');
-    myPartsTab.classList.toggle('active', kind === 'part');
-    saveRow.style.display = kind === 'model' ? 'flex' : 'none';
-    partsHint.style.display = kind === 'part' ? 'block' : 'none';
+  function setActiveTab(section: Section): void {
+    activeSection = section;
+    myModelsTab.classList.toggle('active', section === 'model');
+    myPartsTab.classList.toggle('active', section === 'part');
+    printablesTab.classList.toggle('active', section === 'printables');
+    thingiverseTab.classList.toggle('active', section === 'thingiverse');
     statusLine.textContent = '';
-    void refresh();
+
+    const isLocal = section === 'model' || section === 'part';
+    saveRow.style.display = section === 'model' ? 'flex' : 'none';
+    partsHint.style.display = section === 'part' ? 'block' : 'none';
+    searchInput.style.display = isLocal ? '' : 'none';
+    list.style.display = isLocal ? 'flex' : 'none';
+    externalPanel.style.display = isLocal ? 'none' : 'flex';
+
+    if (isLocal) {
+      void refresh();
+    } else {
+      activeSource = section === 'printables' ? printablesSource : thingiverseSource;
+      externalBadge.textContent = `SOURCE: ${activeSource.name.toUpperCase()}`;
+      externalQueryInput.value = '';
+    }
   }
   myModelsTab.addEventListener('click', () => setActiveTab('model'));
   myPartsTab.addEventListener('click', () => setActiveTab('part'));
+  printablesTab.addEventListener('click', () => setActiveTab('printables'));
+  thingiverseTab.addEventListener('click', () => setActiveTab('thingiverse'));
 
   searchInput.addEventListener('input', renderList);
 
@@ -167,7 +218,7 @@ export function openLibraryScreen(app: App): void {
     }
   });
 
-  box.append(title, tabsRow, saveRow, partsHint, searchInput, statusLine, list, buttons);
+  box.append(title, tabsRow, saveRow, partsHint, searchInput, statusLine, list, externalPanel, buttons);
   backdrop.appendChild(box);
   document.body.appendChild(backdrop);
 
