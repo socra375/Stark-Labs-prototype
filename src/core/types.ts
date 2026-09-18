@@ -21,8 +21,8 @@ export interface SceneObjectMetadata {
   symmetryGroup?: string;
   mirrorOf?: string;
   mirrorAxis?: 'x' | 'y' | 'z';
-  /** Stamped once at creation; drives scene-tree grouping (Build/Import/Reconstruction). */
-  origin?: 'build' | 'import' | 'reconstruction';
+  /** Stamped once at creation; drives scene-tree grouping (Build/Import/Reconstruction/Joined). */
+  origin?: 'build' | 'import' | 'reconstruction' | 'joined';
   /** Set only by JoinCommand — the exact pre-join snapshots, so Separate can reverse losslessly. */
   joinedFrom?: SceneObject[];
   /** Present only when origin === 'reconstruction'. Always an estimate, never a measurement. */
@@ -52,7 +52,9 @@ export interface SceneObject {
   metadata: SceneObjectMetadata;
 }
 
-export type MaterialPreset = 'metal' | 'plastic' | 'glass' | 'fiber' | 'custom';
+export type MaterialPreset =
+  | 'metal' | 'plastic' | 'glass' | 'fiber' | 'custom'
+  | 'titanium' | 'carbonFiber' | 'rubber' | 'gold' | 'redMetal' | 'blueMetal';
 
 export interface MaterialDefinition {
   id: string;

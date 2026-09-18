@@ -2,11 +2,11 @@ import type { AITool } from '../types';
 import type { MaterialPreset } from '../../core/types';
 import { AssignMaterialCommand } from '../../editor/commands/AssignMaterialCommand';
 
-const VALID_PRESETS: Exclude<MaterialPreset, 'custom'>[] = ['metal', 'plastic', 'glass', 'fiber'];
+const VALID_PRESETS: Exclude<MaterialPreset, 'custom'>[] = ['metal', 'plastic', 'glass', 'fiber', 'titanium', 'carbonFiber', 'rubber', 'gold', 'redMetal', 'blueMetal'];
 
 export const changeMaterialTool: AITool = {
   name: 'change_material',
-  description: 'Assigns a new preset material (metal/plastic/glass/fiber) to an object.',
+  description: 'Assigns a new preset material (metal/plastic/glass/fiber/titanium/carbonFiber/rubber/gold/redMetal/blueMetal) to an object.',
   destructive: false,
   validate(args, ctx) {
     const errors: string[] = [];

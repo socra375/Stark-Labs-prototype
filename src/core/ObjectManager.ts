@@ -37,7 +37,7 @@ export class ObjectManager {
       children: [],
       visible: true,
       locked: false,
-      metadata: input.metadata ?? {},
+      metadata: { origin: 'build', ...(input.metadata ?? {}) },
     };
     this.objects.set(id, obj);
     if (obj.parentId) {

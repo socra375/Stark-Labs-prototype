@@ -8,6 +8,12 @@ export const MATERIAL_PRESETS: Record<Exclude<MaterialPreset, 'custom'>, Omit<Ma
   plastic: { color: '#e0463c', metalness: 0, roughness: 0.55, opacity: 1, transparent: false, emissive: '#000000', emissiveIntensity: 0 },
   glass: { color: '#4fd8ff', metalness: 0, roughness: 0.05, opacity: 0.35, transparent: true, emissive: '#0a3040', emissiveIntensity: 0.15 },
   fiber: { color: '#20242c', metalness: 0.15, roughness: 0.75, opacity: 1, transparent: false, emissive: '#000000', emissiveIntensity: 0 },
+  titanium: { color: '#8a9aa8', metalness: 0.9, roughness: 0.42, opacity: 1, transparent: false, emissive: '#000000', emissiveIntensity: 0 },
+  carbonFiber: { color: '#15171b', metalness: 0.2, roughness: 0.35, opacity: 1, transparent: false, emissive: '#000000', emissiveIntensity: 0 },
+  rubber: { color: '#0e0e10', metalness: 0, roughness: 0.95, opacity: 1, transparent: false, emissive: '#000000', emissiveIntensity: 0 },
+  gold: { color: '#e6c35c', metalness: 1, roughness: 0.18, opacity: 1, transparent: false, emissive: '#000000', emissiveIntensity: 0 },
+  redMetal: { color: '#b8342f', metalness: 0.9, roughness: 0.3, opacity: 1, transparent: false, emissive: '#000000', emissiveIntensity: 0 },
+  blueMetal: { color: '#3a6ea5', metalness: 0.9, roughness: 0.3, opacity: 1, transparent: false, emissive: '#000000', emissiveIntensity: 0 },
 };
 
 /** Owns MaterialDefinition records (the data model) and builds/caches the corresponding THREE.MeshStandardMaterial. */

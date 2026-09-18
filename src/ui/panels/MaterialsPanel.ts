@@ -3,7 +3,11 @@ import type { MaterialDefinition, MaterialPreset } from '../../core/types';
 import { MaterialChangeCommand } from '../../editor/commands/MaterialChangeCommand';
 import { AssignMaterialCommand } from '../../editor/commands/AssignMaterialCommand';
 
-const PRESETS: Exclude<MaterialPreset, 'custom'>[] = ['metal', 'plastic', 'glass', 'fiber'];
+const PRESETS: Exclude<MaterialPreset, 'custom'>[] = ['metal', 'plastic', 'glass', 'fiber', 'titanium', 'carbonFiber', 'rubber', 'gold', 'redMetal', 'blueMetal'];
+
+function presetLabel(preset: string): string {
+  return preset.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toUpperCase());
+}
 
 export function createMaterialsPanel(app: App): HTMLElement {
   const root = document.createElement('div');
@@ -21,6 +25,14 @@ export function createMaterialsPanel(app: App): HTMLElement {
   const content = document.createElement('div');
   root.appendChild(content);
 
+  const noMaterialHint = document.createElement('div');
+  noMaterialHint.className = 'empty-hint';
+  noMaterialHint.textContent = 'No material assigned yet — pick a preset below.';
+  content.appendChild(noMaterialHint);
+
+  const propertiesWrap = document.createElement('div');
+  content.appendChild(propertiesWrap);
+
   // Assign: existing-material dropdown + "new preset" buttons.
   const assignRow = document.createElement('select');
   assignRow.className = 'text-field mono';
@@ -36,7 +48,7 @@ export function createMaterialsPanel(app: App): HTMLElement {
     btn.className = 'btn';
     btn.style.flex = '1';
     btn.style.fontSize = '11px';
-    btn.textContent = preset;
+    btn.textContent = presetLabel(preset);
     btn.addEventListener('click', () => {
       const objId = currentObjectId();
       if (!objId) return;
@@ -60,7 +72,8 @@ export function createMaterialsPanel(app: App): HTMLElement {
   transparentCb.type = 'checkbox';
   transparentRow.append(transparentCb, document.createTextNode('Transparent'));
 
-  content.append(assignRow, newRow, colorField.row, metalnessField.row, roughnessField.row, opacityField.row, emissiveField.row, emissiveIntensityField.row, transparentRow);
+  propertiesWrap.append(colorField.row, metalnessField.row, roughnessField.row, opacityField.row, emissiveField.row, emissiveIntensityField.row, transparentRow);
+  content.append(assignRow, newRow, noMaterialHint, propertiesWrap);
 
   let editingBefore: Partial<MaterialDefinition> | null = null;
 
@@ -90,11 +103,15 @@ export function createMaterialsPanel(app: App): HTMLElement {
   }
 
   function refresh(): void {
+    const objId = currentObjectId();
     const mat = currentMaterial();
-    empty.style.display = mat ? 'none' : '';
-    content.style.display = mat ? '' : 'none';
-    if (!mat) return;
+    empty.style.display = objId ? 'none' : '';
+    content.style.display = objId ? '' : 'none';
+    noMaterialHint.style.display = mat ? 'none' : '';
+    propertiesWrap.style.display = mat ? '' : 'none';
+    if (!objId) return;
     refreshDropdown();
+    if (!mat) return;
     colorField.input.value = mat.color;
     emissiveField.input.value = mat.emissive;
     metalnessField.input.value = String(mat.metalness);

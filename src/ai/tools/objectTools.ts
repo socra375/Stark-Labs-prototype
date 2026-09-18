@@ -61,7 +61,7 @@ export const createObjectTool: AITool = {
       children: [],
       visible: true,
       locked: false,
-      metadata: {},
+      metadata: { origin: 'build' as const },
     };
     return new CreateObjectCommand(ctx.objects, [snapshot], `Created ${snapshot.name}`);
   },

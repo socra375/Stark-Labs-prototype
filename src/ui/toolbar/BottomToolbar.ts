@@ -60,18 +60,31 @@ export function createBottomToolbar(app: App, extra: HTMLElement[] = [], onAICli
   savePartBtn.textContent = 'Save as Part';
   savePartBtn.addEventListener('click', () => openSaveAsPartDialog(app));
 
+  const joinBtn = document.createElement('button');
+  joinBtn.className = 'btn';
+  joinBtn.textContent = 'Join';
+  joinBtn.addEventListener('click', () => app.joinSelection());
+
+  const separateBtn = document.createElement('button');
+  separateBtn.className = 'btn';
+  separateBtn.textContent = 'Separate';
+  separateBtn.addEventListener('click', () => app.separateSelection());
+
   const refreshSelectionButtons = (): void => {
-    const n = app.state.selection.get().length;
+    const ids = app.state.selection.get();
+    const n = ids.length;
     groupBtn.disabled = n < 2;
-    ungroupBtn.disabled = n !== 1 || app.objects.get(app.state.selection.get()[0])?.type !== 'group';
+    ungroupBtn.disabled = n !== 1 || app.objects.get(ids[0])?.type !== 'group';
     duplicateBtn.disabled = n < 1;
     deleteBtn.disabled = n < 1;
     savePartBtn.disabled = n < 1;
+    joinBtn.disabled = n < 2 || !ids.every((id) => app.objects.get(id)?.type === 'mesh');
+    separateBtn.disabled = n !== 1;
   };
   app.state.selection.subscribe(refreshSelectionButtons, true);
   app.bus.on('object:updated', refreshSelectionButtons);
 
-  root.append(groupBtn, ungroupBtn, duplicateBtn, deleteBtn, savePartBtn);
+  root.append(groupBtn, ungroupBtn, duplicateBtn, deleteBtn, savePartBtn, joinBtn, separateBtn);
   root.appendChild(divider());
 
   const mirrorButtons: HTMLButtonElement[] = (['x', 'y', 'z'] as const).map((axis) => {

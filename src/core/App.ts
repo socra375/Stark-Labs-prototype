@@ -60,6 +60,10 @@ import { AICommandExecutor } from '../ai/AICommandExecutor';
 import { AnalysisEngine } from '../ai/AnalysisEngine';
 import { SimulationEngine } from '../simulation/SimulationEngine';
 import { BotManager } from '../bots/BotManager';
+import { JoinTool } from '../editor/JoinTool';
+import { JoinCommand } from '../editor/commands/JoinCommand';
+import { SeparateTool } from '../editor/SeparateTool';
+import { SeparateCommand } from '../editor/commands/SeparateCommand';
 import type { Vec3, Connection, ProjectMeta, SceneObject, ReferenceImage, SavedModel } from './types';
 
 /** Top-level orchestrator wiring core managers, the 3D viewport, and app state together. */
@@ -79,6 +83,8 @@ export class App {
   readonly history: HistoryManager;
   readonly grouping: GroupingManager;
   readonly mirror: MirrorTool;
+  readonly joinTool: JoinTool;
+  readonly separateTool: SeparateTool;
   readonly assembly: AssemblyManager;
   readonly assemblyVisualizer: AssemblyVisualizer;
   readonly referenceImages: ReferenceImageManager;
@@ -109,6 +115,8 @@ export class App {
     this.history = new HistoryManager(this.bus, () => this.state.currentProject.get()?.id ?? 'unsaved');
     this.grouping = new GroupingManager(this.objects, this.coords);
     this.mirror = new MirrorTool(this.objects, this.coords);
+    this.joinTool = new JoinTool(this.objects, this.sceneSync, this.coords);
+    this.separateTool = new SeparateTool(this.objects, this.assets, this.sceneSync);
     this.assembly = new AssemblyManager(this.bus);
     this.assemblyVisualizer = new AssemblyVisualizer(this.bus, this.assembly, this.coords, this.viewport.sceneManager.scene);
     this.referenceImages = new ReferenceImageManager(this.bus);
@@ -439,6 +447,33 @@ export class App {
     if (newIds.length) this.selection.set(newIds);
   }
 
+  /** Real, explicit error on failure (unlike Group/Mirror's silent no-op) — Join's own design
+   * requires it, since "selecting a group" or "incompatible geometry" are real mistakes the user
+   * needs to see, not a silently-ignored click. */
+  joinSelection(): void {
+    const ids = this.selectableIds(this.state.selection.get());
+    const result = this.joinTool.planJoin(ids);
+    if (!result.ok) {
+      window.alert(result.error);
+      return;
+    }
+    if (result.plan.materialWarning) window.alert(result.plan.materialWarning);
+    this.history.execute(new JoinCommand(this.objects, this.assets, result.plan));
+    this.selection.selectOnly(result.plan.mergedObject.id);
+  }
+
+  separateSelection(): void {
+    const ids = this.selectableIds(this.state.selection.get());
+    if (ids.length !== 1) return;
+    const result = this.separateTool.planSeparate(ids[0]);
+    if (!result.ok) {
+      window.alert(result.error);
+      return;
+    }
+    this.history.execute(new SeparateCommand(this.objects, this.assets, result.plan));
+    this.selection.set(result.plan.newObjects.map((o) => o.id));
+  }
+
   connectSelection(): void {
     const ids = this.selectableIds(this.state.selection.get());
     if (ids.length !== 2) return;
@@ -490,7 +525,11 @@ export class App {
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
       if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'z' && !ev.shiftKey) { ev.preventDefault(); this.history.undo(); }
       else if ((ev.ctrlKey || ev.metaKey) && (ev.key.toLowerCase() === 'y' || (ev.key.toLowerCase() === 'z' && ev.shiftKey))) { ev.preventDefault(); this.history.redo(); }
+      else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'd') { ev.preventDefault(); this.duplicateSelection(); }
       else if (ev.key === 'Delete' || ev.key === 'Backspace') { this.deleteSelection(); }
+      else if (!ev.ctrlKey && !ev.metaKey && ev.key.toLowerCase() === 'w') { this.state.activeTool.set('move'); }
+      else if (!ev.ctrlKey && !ev.metaKey && ev.key.toLowerCase() === 'e') { this.state.activeTool.set('rotate'); }
+      else if (!ev.ctrlKey && !ev.metaKey && ev.key.toLowerCase() === 'r') { this.state.activeTool.set('scale'); }
     });
 
     this.state.selection.subscribe((ids) => this.attachGizmoToSelection(this.selectableIds(ids)));
