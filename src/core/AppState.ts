@@ -11,4 +11,9 @@ export class AppState {
   readonly currentProject = signal<ProjectMeta | null>(null);
   readonly dirty = signal<boolean>(false);
   readonly transformSpace = signal<'local' | 'world'>('local');
+  /** Real indeterminate-progress flag gated on the actual import parse promise — no fake percentage. */
+  readonly importing = signal<boolean>(false);
+  /** Mutually exclusive with `selection` — a ReferenceImage is never a SceneObject, so it can't
+   * share the ObjectManager-backed selection array. Set/cleared together at every write site. */
+  readonly selectedReferenceImageId = signal<string | null>(null);
 }

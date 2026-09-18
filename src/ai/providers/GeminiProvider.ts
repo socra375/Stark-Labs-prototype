@@ -1,4 +1,11 @@
 import type { AIProvider, AIInterpretResult } from './AIProvider';
+import type { ObjectManager } from '../../core/ObjectManager';
+import type { AssemblyManager } from '../../editor/AssemblyManager';
+import type { ImageAnalysisResult } from '../ImageAnalysis';
+import type { ComponentSuggestion } from '../ComponentSuggestions';
+import type { ConstructionPlanStep } from '../ConstructionPlan';
+
+const DISABLED_MESSAGE = 'Gemini is not configured in this deployment. No API key is present in the frontend, and no secure backend endpoint has been set up yet (Stage 3 of the AI rollout). Use the offline Mock provider instead.';
 
 /**
  * Staged rollout (per project decision, not to be changed without the user asking):
@@ -26,5 +33,17 @@ export class GeminiProvider implements AIProvider {
     // free text mutate state directly; it would feed straight into the same ToolParser/
     // ToolValidator/PermissionValidator/PreviewGenerator pipeline as MockProvider.
     throw new Error('GeminiProvider.interpret() is not implemented — Stage 3 of the AI rollout.');
+  }
+
+  async analyzeImage(_file: File): Promise<ImageAnalysisResult> {
+    throw new Error(DISABLED_MESSAGE);
+  }
+
+  async suggestComponents(_objects: ObjectManager, _assembly: AssemblyManager): Promise<ComponentSuggestion[]> {
+    throw new Error(DISABLED_MESSAGE);
+  }
+
+  async generateConstructionPlan(_objects: ObjectManager, _assembly: AssemblyManager): Promise<ConstructionPlanStep[]> {
+    throw new Error(DISABLED_MESSAGE);
   }
 }

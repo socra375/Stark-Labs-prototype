@@ -2,14 +2,17 @@ import * as THREE from 'three';
 import type { SceneObject } from '../core/types';
 import { GeometryFactory } from './GeometryFactory';
 import type { MaterialManager } from './MaterialManager';
+import type { AssetManager } from './AssetManager';
 
 const DEFAULT_MATERIAL = new THREE.MeshStandardMaterial({ color: 0x8899aa, metalness: 0.3, roughness: 0.6 });
 
 /** Builds a THREE.Object3D (Mesh for 'mesh' SceneObjects, Group for 'group') from a SceneObject. */
 export class MeshFactory {
-  private geometryFactory = new GeometryFactory();
+  private geometryFactory: GeometryFactory;
 
-  constructor(private materials: MaterialManager) {}
+  constructor(private materials: MaterialManager, assets?: AssetManager) {
+    this.geometryFactory = new GeometryFactory(assets);
+  }
 
   build(obj: SceneObject): THREE.Object3D {
     if (obj.type === 'group') {

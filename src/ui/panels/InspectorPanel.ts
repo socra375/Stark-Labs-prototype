@@ -1,5 +1,6 @@
 import type { Inspector } from '../../editor/Inspector';
 import { createNumericField } from '../components/NumericField';
+import { GEOMETRY_EDIT_OPERATIONS } from '../../editor/geometry/GeometryEditOperation';
 
 export function createInspectorPanel(inspector: Inspector): HTMLElement {
   const root = document.createElement('div');
@@ -85,11 +86,49 @@ export function createInspectorPanel(inspector: Inspector): HTMLElement {
 
   visSection.append(visRow, lockRow);
 
-  content.append(nameSection, transformSection, visSection);
+  // Geometry-editing boundary (M23): a real, honest entry point for imported/reconstruction
+  // meshes only — meaningless for a parametric primitive, which has no vertex data to edit yet.
+  const geometrySection = document.createElement('div');
+  geometrySection.className = 'panel-section';
+  geometrySection.style.display = 'none';
+  const geometryTitleRow = document.createElement('div');
+  geometryTitleRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:8px;';
+  const geometryTitle = document.createElement('div');
+  geometryTitle.className = 'panel-section-title';
+  geometryTitle.style.marginBottom = '0';
+  geometryTitle.textContent = 'Geometry Edit';
+  const geometryBadge = document.createElement('span');
+  geometryBadge.className = 'badge-coming-soon';
+  geometryBadge.textContent = 'Coming Soon';
+  geometryTitleRow.append(geometryTitle, geometryBadge);
+  const geometryHint = document.createElement('div');
+  geometryHint.className = 'empty-hint';
+  geometryHint.textContent = 'Vertex/face/edge editing for imported and reconstructed geometry is a future module.';
+  const geometryListBtn = document.createElement('button');
+  geometryListBtn.className = 'btn';
+  geometryListBtn.style.cssText = 'width:100%;margin:8px 0;';
+  geometryListBtn.textContent = 'List Planned Operations';
+  const geometryOutput = document.createElement('div');
+  geometryOutput.style.cssText = 'font-size:10px;color:var(--text-2);line-height:1.5;';
+  geometryListBtn.addEventListener('click', () => {
+    geometryOutput.innerHTML = '';
+    for (const op of GEOMETRY_EDIT_OPERATIONS) {
+      const result = op.execute('', { kind: 'vertex', indices: [] });
+      const line = document.createElement('div');
+      line.textContent = `${result.operation}: ${result.message}`;
+      geometryOutput.appendChild(line);
+    }
+  });
+  geometrySection.append(geometryTitleRow, geometryHint, geometryListBtn, geometryOutput);
+
+  content.append(nameSection, transformSection, visSection, geometrySection);
 
   inspector.fields.id.subscribe((id) => {
     empty.style.display = id ? 'none' : '';
     content.style.display = id ? '' : 'none';
+  }, true);
+  inspector.fields.origin.subscribe((origin) => {
+    geometrySection.style.display = origin === 'import' || origin === 'reconstruction' ? '' : 'none';
   }, true);
 
   return root;

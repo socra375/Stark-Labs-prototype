@@ -1,10 +1,26 @@
 import type { AIProvider, AIInterpretResult } from './AIProvider';
 import type { ToolCallCandidate } from '../types';
+import type { ObjectManager } from '../../core/ObjectManager';
+import type { AssemblyManager } from '../../editor/AssemblyManager';
 import { GEOMETRY_TYPES } from '../../3d/GeometryFactory';
+import { analyzeImageFacts, type ImageAnalysisResult } from '../ImageAnalysis';
+import { suggestComponents as computeSuggestions, type ComponentSuggestion } from '../ComponentSuggestions';
+import { generateConstructionPlan as computePlan, type ConstructionPlanStep } from '../ConstructionPlan';
 
 type Rule = { pattern: RegExp; build: (m: RegExpMatchArray) => ToolCallCandidate['args'] & { toolName: string } };
 
 const GEOM = GEOMETRY_TYPES.join('|');
+
+// A plain regex alternation can't cleanly express multi-word phrasing ("carbon fiber"), so the
+// pattern below matches the whole phrase and this table normalizes it to the real preset key.
+const MATERIAL_PHRASES: Record<string, string> = {
+  metal: 'metal', plastic: 'plastic', glass: 'glass', fiber: 'fiber',
+  titanium: 'titanium', rubber: 'rubber', gold: 'gold',
+  'carbon fiber': 'carbonFiber', carbonfiber: 'carbonFiber',
+  'red metal': 'redMetal', redmetal: 'redMetal',
+  'blue metal': 'blueMetal', bluemetal: 'blueMetal',
+};
+const MATERIAL_PHRASE_PATTERN = Object.keys(MATERIAL_PHRASES).sort((a, b) => b.length - a.length).join('|');
 
 const RULES: Rule[] = [
   { pattern: new RegExp(`^create\\s+(?:a\\s+)?(${GEOM})(?:\\s+named\\s+(.+))?$`, 'i'), build: (m) => ({ toolName: 'create_object', geometryType: m[1].toLowerCase(), name: m[2]?.trim() || m[1] }) },
@@ -23,11 +39,13 @@ const RULES: Rule[] = [
   { pattern: /^group\s+(.+?)\s+and\s+(.+)$/i, build: (m) => ({ toolName: 'group_objects', targetNames: [m[1].trim(), m[2].trim()] }) },
   { pattern: /^ungroup\s+(?:the\s+)?(.+)$/i, build: (m) => ({ toolName: 'ungroup_objects', targetName: m[1].trim() }) },
   { pattern: /^mirror\s+(?:the\s+)?(.+?)\s+(?:across|on)\s+(x|y|z)$/i, build: (m) => ({ toolName: 'mirror_object', targetName: m[1].trim(), axis: m[2].toLowerCase() }) },
-  { pattern: /^(?:change|set)\s+(?:the\s+)?material\s+(?:of\s+)?(.+?)\s+to\s+(metal|plastic|glass|fiber)$/i, build: (m) => ({ toolName: 'change_material', targetName: m[1].trim(), preset: m[2].toLowerCase() }) },
+  { pattern: new RegExp(`^(?:change|set)\\s+(?:the\\s+)?material\\s+(?:of\\s+)?(.+?)\\s+to\\s+(${MATERIAL_PHRASE_PATTERN})$`, 'i'), build: (m) => ({ toolName: 'change_material', targetName: m[1].trim(), preset: MATERIAL_PHRASES[m[2].toLowerCase()] }) },
   { pattern: /^connect\s+(.+?)\s+(?:and|to)\s+(.+)$/i, build: (m) => ({ toolName: 'connect_objects', targetNameA: m[1].trim(), targetNameB: m[2].trim() }) },
   { pattern: /^disconnect\s+(.+?)\s+(?:and|from)\s+(.+)$/i, build: (m) => ({ toolName: 'disconnect_objects', targetNameA: m[1].trim(), targetNameB: m[2].trim() }) },
   { pattern: /^inspect\s+(?:the\s+)?(.+)$/i, build: (m) => ({ toolName: 'inspect_object', targetName: m[1].trim() }) },
   { pattern: /^analyz[e]\s*(?:the\s+scene)?$/i, build: () => ({ toolName: 'analyze_scene' }) },
+  { pattern: /^suggest\s+(?:missing\s+)?components?$/i, build: () => ({ toolName: 'suggest_components' }) },
+  { pattern: /^(?:generate|create)\s+(?:a\s+)?construction\s+plan$/i, build: () => ({ toolName: 'generate_construction_plan' }) },
   { pattern: /^(?:create|save)\s+(?:a\s+)?version(?:\s+(?:named|called)\s+(.+))?$/i, build: (m) => ({ toolName: 'create_version', name: m[1]?.trim() || `v-${new Date().toLocaleTimeString()}` }) },
   { pattern: /^restore\s+(?:version\s+)?(.+)$/i, build: (m) => ({ toolName: 'restore_version', name: m[1].trim() }) },
 ];
@@ -56,7 +74,20 @@ export class MockProvider implements AIProvider {
       candidates: [],
       message:
         "[MOCK] I couldn't match that to a known command. Try things like: \"create a box\", " +
-        '"delete the torso", "scale both arms by 10%", "mirror arm_l across x", "connect torso and arm_l", or "analyze the scene".',
+        '"delete the torso", "scale both arms by 10%", "mirror arm_l across x", "connect torso and arm_l", ' +
+        '"analyze the scene", "suggest components", or "generate a construction plan".',
     };
+  }
+
+  async analyzeImage(file: File): Promise<ImageAnalysisResult> {
+    return analyzeImageFacts(file);
+  }
+
+  async suggestComponents(objects: ObjectManager, assembly: AssemblyManager): Promise<ComponentSuggestion[]> {
+    return computeSuggestions(objects, assembly);
+  }
+
+  async generateConstructionPlan(objects: ObjectManager, assembly: AssemblyManager): Promise<ConstructionPlanStep[]> {
+    return computePlan(objects, assembly);
   }
 }

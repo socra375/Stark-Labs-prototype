@@ -1,4 +1,4 @@
-import type { SceneObject, MaterialDefinition, Connection, ProjectMeta } from '../core/types';
+import type { SceneObject, MaterialDefinition, Connection, AssetRecord, ReferenceImage, ProjectMeta } from '../core/types';
 import type { LiveScene } from './ProjectRepository';
 import { Serializer } from './Serializer';
 import { downloadText, pickFile } from '../utils/download';
@@ -15,12 +15,14 @@ export interface StarkFile {
   components: SceneObject[];
   materials: MaterialDefinition[];
   assemblies: Connection[];
+  assets: AssetRecord[];
+  referenceImages: ReferenceImage[];
 }
 
 export function exportProject(scene: LiveScene): void {
   const meta = scene.state.currentProject.get();
   if (!meta) return;
-  const snapshot = Serializer.capture(scene.objects, scene.materials, scene.assembly);
+  const snapshot = Serializer.capture(scene.objects, scene.materials, scene.assembly, scene.assets, scene.referenceImages);
   const file: StarkFile = {
     format: STARK_FORMAT,
     version: STARK_FORMAT_VERSION,
@@ -48,6 +50,9 @@ export function parseStarkFile(text: string): StarkFile {
   if (!Array.isArray(file.components) || !Array.isArray(file.materials) || !Array.isArray(file.assemblies) || !file.project) {
     throw new StarkFormatError('File is missing required project data.');
   }
+  // assets/referenceImages didn't exist before 2.0 — default them so a pre-2.0 .stark file still imports cleanly.
+  if (!Array.isArray(file.assets)) file.assets = [];
+  if (!Array.isArray(file.referenceImages)) file.referenceImages = [];
   return file as StarkFile;
 }
 
@@ -62,7 +67,7 @@ export async function importProjectFromPicker(scene: LiveScene): Promise<Project
     id: `proj_${crypto.randomUUID().slice(0, 8)}`,
     updatedAt: new Date().toISOString(),
   };
-  Serializer.apply(scene.objects, scene.materials, scene.assembly, parsed);
+  Serializer.apply(scene.objects, scene.materials, scene.assembly, scene.assets, scene.referenceImages, parsed);
   scene.state.currentProject.set(meta);
   scene.state.dirty.set(true);
   return meta;

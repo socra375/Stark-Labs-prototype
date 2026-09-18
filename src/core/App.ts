@@ -3,6 +3,7 @@ import { ObjectManager } from './ObjectManager';
 import { AppState } from './AppState';
 import { Viewport } from '../3d/Viewport';
 import { MaterialManager } from '../3d/MaterialManager';
+import { AssetManager } from '../3d/AssetManager';
 import { SceneSync } from '../3d/SceneSync';
 import { CoordinateSystem } from '../3d/CoordinateSystem';
 import { TransformGizmo } from '../3d/TransformGizmo';
@@ -23,14 +24,32 @@ import { AssemblyManager } from '../editor/AssemblyManager';
 import { AssemblyVisualizer } from '../3d/AssemblyVisualizer';
 import { ConnectCommand } from '../editor/commands/ConnectCommand';
 import { DisconnectCommand } from '../editor/commands/DisconnectCommand';
+import { ReferenceImageManager } from '../editor/ReferenceImageManager';
+import { ReferenceImageVisualizer } from '../3d/ReferenceImageVisualizer';
+import { CreateReferenceImageCommand } from '../editor/commands/CreateReferenceImageCommand';
+import { TransformReferenceImageCommand, type ReferenceImageTransform } from '../editor/commands/TransformReferenceImageCommand';
+import { DeleteReferenceImageCommand } from '../editor/commands/DeleteReferenceImageCommand';
 import { generateId } from '../utils/ids';
 import { Database } from '../storage/Database';
 import { ProjectRepository, type LiveScene } from '../storage/ProjectRepository';
 import { VersionRepository } from '../storage/VersionRepository';
 import { HistoryRepository } from '../storage/HistoryRepository';
+import { ModelLibraryRepository } from '../storage/ModelLibraryRepository';
+import { Serializer } from '../storage/Serializer';
+import { remapSavedModelForInsertion } from '../library/LibraryInsertion';
+import { capturePartSnapshot } from '../library/PartCapture';
+import { InsertLibraryItemCommand } from '../editor/commands/InsertLibraryItemCommand';
 import { AutosaveService } from '../storage/AutosaveService';
 import { getTemplate } from '../templates/TemplateRegistry';
 import { exportProject, importProjectFromPicker } from '../storage/StarkFileFormat';
+import { importModelFile } from '../3d/import/ModelImporter';
+import { ImportCommand } from '../editor/commands/ImportCommand';
+import { toGeometryAssetRecord, defaultCustomMaterial } from '../3d/import/ImportShared';
+import { pickFile } from '../utils/download';
+import { ReconstructionService } from '../reconstruction/ReconstructionService';
+import { toSourceImageAssetRecord } from '../reconstruction/ReconstructionAssets';
+import { ReconstructionCommitCommand } from '../editor/commands/ReconstructionCommitCommand';
+import type { ReconstructionMode, ReconstructionPreview } from '../reconstruction/types';
 import { AIService } from '../ai/AIService';
 import { ToolRegistry } from '../ai/ToolRegistry';
 import { ToolParser } from '../ai/ToolParser';
@@ -41,7 +60,12 @@ import { AICommandExecutor } from '../ai/AICommandExecutor';
 import { AnalysisEngine } from '../ai/AnalysisEngine';
 import { SimulationEngine } from '../simulation/SimulationEngine';
 import { BotManager } from '../bots/BotManager';
-import type { Vec3, Connection, ProjectMeta } from './types';
+import { ConstructionEngine } from '../construction/ConstructionEngine';
+import { JoinTool } from '../editor/JoinTool';
+import { JoinCommand } from '../editor/commands/JoinCommand';
+import { SeparateTool } from '../editor/SeparateTool';
+import { SeparateCommand } from '../editor/commands/SeparateCommand';
+import type { Vec3, Connection, ProjectMeta, SceneObject, ReferenceImage, SavedModel } from './types';
 
 /** Top-level orchestrator wiring core managers, the 3D viewport, and app state together. */
 export class App {
@@ -49,6 +73,7 @@ export class App {
   readonly state = new AppState();
   readonly objects = new ObjectManager(this.bus);
   readonly materials = new MaterialManager(this.bus);
+  readonly assets = new AssetManager();
   readonly viewport: Viewport;
   readonly sceneSync: SceneSync;
   readonly coords: CoordinateSystem;
@@ -59,39 +84,53 @@ export class App {
   readonly history: HistoryManager;
   readonly grouping: GroupingManager;
   readonly mirror: MirrorTool;
+  readonly joinTool: JoinTool;
+  readonly separateTool: SeparateTool;
   readonly assembly: AssemblyManager;
   readonly assemblyVisualizer: AssemblyVisualizer;
+  readonly referenceImages: ReferenceImageManager;
+  readonly referenceImageVisualizer: ReferenceImageVisualizer;
   readonly db = new Database();
   readonly projectRepo: ProjectRepository;
   readonly versionRepo: VersionRepository;
   readonly historyRepo: HistoryRepository;
+  readonly libraryRepo: ModelLibraryRepository;
   readonly autosave: AutosaveService;
   readonly ai = new AIService();
+  readonly reconstruction = new ReconstructionService();
   readonly aiTools = new ToolRegistry();
   readonly aiExecutor: AICommandExecutor;
   readonly analysisEngine: AnalysisEngine;
   readonly simulation = new SimulationEngine();
   readonly bots: BotManager;
+  readonly construction: ConstructionEngine;
   private pivot: GroupTransformPivot;
   private dragBefore: Map<string, TransformDelta['before']> = new Map();
+  private refDragBefore: ReferenceImageTransform | null = null;
 
   constructor(container: HTMLElement) {
     this.viewport = new Viewport(container);
-    this.sceneSync = new SceneSync(this.bus, this.objects, this.materials, this.viewport.sceneManager.objectRoot);
+    this.sceneSync = new SceneSync(this.bus, this.objects, this.materials, this.viewport.sceneManager.objectRoot, this.assets);
     this.coords = new CoordinateSystem(this.objects);
     this.selection = new SelectionManager(this.bus, this.state, this.objects);
     this.inspector = new Inspector(this.bus, this.state, this.objects);
     this.history = new HistoryManager(this.bus, () => this.state.currentProject.get()?.id ?? 'unsaved');
     this.grouping = new GroupingManager(this.objects, this.coords);
     this.mirror = new MirrorTool(this.objects, this.coords);
+    this.joinTool = new JoinTool(this.objects, this.sceneSync, this.coords);
+    this.separateTool = new SeparateTool(this.objects, this.assets, this.sceneSync);
     this.assembly = new AssemblyManager(this.bus);
     this.assemblyVisualizer = new AssemblyVisualizer(this.bus, this.assembly, this.coords, this.viewport.sceneManager.scene);
+    this.referenceImages = new ReferenceImageManager(this.bus);
+    this.referenceImageVisualizer = new ReferenceImageVisualizer(this.bus, this.referenceImages, this.assets, this.viewport.sceneManager.scene);
     this.projectRepo = new ProjectRepository(this.db);
     this.versionRepo = new VersionRepository(this.db, this.bus);
     this.historyRepo = new HistoryRepository(this.db);
+    this.libraryRepo = new ModelLibraryRepository(this.db);
     this.autosave = new AutosaveService(this.bus, this.projectRepo, this.liveScene());
     this.analysisEngine = new AnalysisEngine(this.objects, this.assembly, this.coords);
     this.bots = new BotManager(this.objects);
+    this.construction = new ConstructionEngine(this.objects, this.assembly);
     this.aiExecutor = new AICommandExecutor(
       this.aiTools,
       new ToolParser(this.objects),
@@ -123,17 +162,22 @@ export class App {
   // --- Project lifecycle -----------------------------------------------------
 
   liveScene(): LiveScene {
-    return { objects: this.objects, materials: this.materials, assembly: this.assembly, state: this.state };
+    return { objects: this.objects, materials: this.materials, assembly: this.assembly, assets: this.assets, referenceImages: this.referenceImages, state: this.state };
   }
 
   newProject(name: string, description: string, templateId: string): ProjectMeta {
     const meta = this.projectRepo.createMeta(name, description, templateId);
     const { components, materials } = getTemplate(templateId).build();
     this.materials.loadAll(materials);
+    this.assets.clear();
+    // Must clear before objects.loadAll() fires 'scene:loaded', which triggers
+    // ReferenceImageVisualizer.rebuildAll() off whatever referenceImages currently holds.
+    this.referenceImages.clear();
     this.objects.loadAll(components);
     this.assembly.clear();
     this.history.clear();
     this.selection.clear();
+    this.state.selectedReferenceImageId.set(null);
     this.state.currentProject.set(meta);
     this.state.dirty.set(false);
     // loadAll()-based template seeding never fires 'project:dirty' (it's a bulk load, not an
@@ -156,6 +200,7 @@ export class App {
     if (ok) {
       this.history.clear();
       this.selection.clear();
+      this.state.selectedReferenceImageId.set(null);
     }
     return ok;
   }
@@ -172,6 +217,204 @@ export class App {
       await this.saveProject();
     }
     return meta;
+  }
+
+  /** Imports a .glb/.gltf/.obj/.stl model into the currently open project (not a whole-project
+   * import — see importProject() for that). Mirrors importProject()'s shape: no internal
+   * try/catch, the UI's click handler surfaces failures via window.alert. */
+  async importModel(): Promise<void> {
+    const file = await pickFile('.glb,.gltf,.obj,.stl');
+    if (!file) return;
+    this.state.importing.set(true);
+    try {
+      const result = await importModelFile(file);
+      const cmd = new ImportCommand(this.objects, this.materials, this.assets, { ...result, sourceName: file.name });
+      this.history.execute(cmd);
+      this.selection.set(result.objects.filter((o) => !o.parentId).map((o) => o.id));
+    } finally {
+      this.state.importing.set(false);
+    }
+  }
+
+  /** Runs the active reconstruction engine's non-mutating preview stage (decode/segment/depth/
+   * point-cloud) — the live scene is untouched until commitReconstruction() is called separately. */
+  async previewReconstruction(file: File, mode: ReconstructionMode = 'ONE_IMAGE'): Promise<ReconstructionPreview> {
+    return this.reconstruction.active.preview({ mode, images: [file] });
+  }
+
+  /** Real, objectively-computable pixel facts about an uploaded image (dimensions, transparency,
+   * average color, segmented foreground coverage) — never object recognition. Read-only, nothing
+   * is written to the scene. */
+  async analyzeImage(file: File): ReturnType<AIService['analyzeImage']> {
+    return this.ai.analyzeImage(file);
+  }
+
+  /** Real, scene-derived suggestions (unpaired mirrors, disconnected pieces) for the current
+   * project — never an invented design idea. */
+  async suggestComponents(): ReturnType<AIService['suggestComponents']> {
+    return this.ai.suggestComponents(this.objects, this.assembly);
+  }
+
+  /** A real computed build order from the current hierarchy and assembly connections. */
+  async generateConstructionPlan(): ReturnType<AIService['generateConstructionPlan']> {
+    return this.ai.generateConstructionPlan(this.objects, this.assembly);
+  }
+
+  /** Commits a reconstruction: re-runs the deterministic pipeline (cheap enough to not bother
+   * caching the preview's intermediates) through to a real BufferGeometry, then applies it as one
+   * normal, editable SceneObject via ReconstructionCommitCommand — transform/material/undo/save/
+   * export/join/separate/mirror all work on it exactly like any other mesh from here on. */
+  async commitReconstruction(file: File, mode: ReconstructionMode = 'ONE_IMAGE'): Promise<void> {
+    const result = await this.reconstruction.active.generate({ mode, images: [file] });
+    const buf = await file.arrayBuffer();
+    const sourceImageAsset = toSourceImageAssetRecord(buf, file.type || 'image/png', file.name);
+    const geometryAsset = toGeometryAssetRecord(result.geometry, 'Reconstruction Geometry (Estimated)');
+    const material = defaultCustomMaterial('Reconstruction Material (Estimated)');
+    const object: SceneObject = {
+      id: generateId('mesh'),
+      name: 'Reconstruction (Estimated)',
+      type: 'mesh',
+      geometry: { type: 'imported', params: {}, assetId: geometryAsset.id },
+      material: material.id,
+      position: [0, 0, 0],
+      rotation: [0, 0, 0],
+      scale: [1, 1, 1],
+      parentId: null,
+      children: [],
+      visible: true,
+      locked: false,
+      metadata: {
+        origin: 'reconstruction',
+        reconstruction: {
+          estimated: true,
+          sourceImageAssetId: sourceImageAsset.id,
+          method: result.method,
+          componentDetection: result.componentDetection,
+        },
+      },
+    };
+    const cmd = new ReconstructionCommitCommand(this.objects, this.materials, this.assets, { sourceImageAsset, geometryAsset, material, object });
+    this.history.execute(cmd);
+    this.selection.set([object.id]);
+  }
+
+  // --- Reference images (Image -> Build) -------------------------------------
+
+  /** Adds a photo as a non-geometry visual reference plane — never a SceneObject, never touched
+   * by Join/Separate/Mirror/AnalysisEngine. Default scale matches the image's own aspect ratio
+   * so it isn't squished on first placement. */
+  async addReferenceImage(): Promise<void> {
+    const file = await pickFile('image/*');
+    if (!file) return;
+    const bitmap = await createImageBitmap(file);
+    const aspect = bitmap.height / bitmap.width;
+    bitmap.close();
+    const buf = await file.arrayBuffer();
+    const imageAsset = toSourceImageAssetRecord(buf, file.type || 'image/png', file.name);
+    const referenceImage: ReferenceImage = {
+      id: generateId('ref'),
+      assetId: imageAsset.id,
+      name: file.name,
+      position: [0, 0, 0],
+      rotation: [0, 0, 0, 1],
+      scale: [1, aspect, 1],
+      opacity: 1,
+      visible: true,
+      locked: false,
+    };
+    this.history.execute(new CreateReferenceImageCommand(this.referenceImages, this.assets, imageAsset, referenceImage));
+    this.selectReferenceImage(referenceImage.id);
+  }
+
+  /** The one mutual-exclusion chokepoint between SceneObject selection and reference-image
+   * selection — a ReferenceImage is never a SceneObject, so the two selections can't overlap. */
+  selectReferenceImage(id: string | null): void {
+    this.state.selectedReferenceImageId.set(id);
+  }
+
+  renameReferenceImage(id: string, name: string): void {
+    this.referenceImages.update(id, { name });
+  }
+
+  setReferenceImageOpacity(id: string, opacity: number): void {
+    this.referenceImages.update(id, { opacity });
+  }
+
+  toggleReferenceImageVisible(id: string): void {
+    const ref = this.referenceImages.get(id);
+    if (!ref) return;
+    this.referenceImages.update(id, { visible: !ref.visible });
+  }
+
+  toggleReferenceImageLock(id: string): void {
+    const ref = this.referenceImages.get(id);
+    if (!ref) return;
+    this.referenceImages.update(id, { locked: !ref.locked });
+  }
+
+  deleteReferenceImage(id: string): void {
+    this.history.execute(new DeleteReferenceImageCommand(this.referenceImages, this.assets, id));
+    if (this.state.selectedReferenceImageId.get() === id) this.state.selectedReferenceImageId.set(null);
+  }
+
+  // --- Library (My Models / My Parts) -----------------------------------------
+
+  /** Captures the whole current scene (same snapshot shape every other consumer uses) as a
+   * named, independently-stored library entry — not tied to the current project. */
+  async saveCurrentSceneAsModel(name: string): Promise<SavedModel> {
+    const snapshot = Serializer.capture(this.objects, this.materials, this.assembly, this.assets, this.referenceImages);
+    const now = new Date().toISOString();
+    const model: SavedModel = {
+      id: generateId('model'),
+      kind: 'model',
+      name,
+      createdAt: now,
+      updatedAt: now,
+      version: 1,
+      snapshot: { components: snapshot.components, materials: snapshot.materials, assemblies: snapshot.assemblies, assets: snapshot.assets },
+    };
+    await this.libraryRepo.save(model);
+    return model;
+  }
+
+  async listLibraryModels(kind?: 'model' | 'part'): Promise<SavedModel[]> {
+    return this.libraryRepo.list(kind);
+  }
+
+  async deleteLibraryModel(id: string): Promise<void> {
+    await this.libraryRepo.remove(id);
+  }
+
+  /** Inserts a real independent copy (fresh ids throughout, deep-cloned data — see
+   * remapSavedModelForInsertion) as new root-level object(s) in the current scene. */
+  async insertLibraryItem(modelId: string): Promise<void> {
+    const model = await this.libraryRepo.get(modelId);
+    if (!model) throw new Error('Library model not found.');
+    const payload = remapSavedModelForInsertion(model);
+    this.history.execute(new InsertLibraryItemCommand(this.objects, this.materials, this.assets, this.assembly, payload));
+    this.selection.set(payload.components.filter((c) => !c.parentId).map((c) => c.id));
+  }
+
+  /** Saves the current selection (each root plus its descendants) as a reusable Part —
+   * self-contained: only the materials/assets/connections that subtree actually uses, never the
+   * whole project's asset library. */
+  async saveSelectionAsPart(name: string, category: string): Promise<SavedModel> {
+    const ids = this.selectableIds(this.state.selection.get());
+    if (!ids.length) throw new Error('Select at least one object to save as a part.');
+    const snapshot = capturePartSnapshot(this.objects, this.materials, this.assembly, this.assets, ids);
+    const now = new Date().toISOString();
+    const model: SavedModel = {
+      id: generateId('model'),
+      kind: 'part',
+      name,
+      category: category || undefined,
+      createdAt: now,
+      updatedAt: now,
+      version: 1,
+      snapshot,
+    };
+    await this.libraryRepo.save(model);
+    return model;
   }
 
   // --- Selection-driven actions -------------------------------------------------
@@ -225,6 +468,33 @@ export class App {
     if (newIds.length) this.selection.set(newIds);
   }
 
+  /** Real, explicit error on failure (unlike Group/Mirror's silent no-op) — Join's own design
+   * requires it, since "selecting a group" or "incompatible geometry" are real mistakes the user
+   * needs to see, not a silently-ignored click. */
+  joinSelection(): void {
+    const ids = this.selectableIds(this.state.selection.get());
+    const result = this.joinTool.planJoin(ids);
+    if (!result.ok) {
+      window.alert(result.error);
+      return;
+    }
+    if (result.plan.materialWarning) window.alert(result.plan.materialWarning);
+    this.history.execute(new JoinCommand(this.objects, this.assets, result.plan));
+    this.selection.selectOnly(result.plan.mergedObject.id);
+  }
+
+  separateSelection(): void {
+    const ids = this.selectableIds(this.state.selection.get());
+    if (ids.length !== 1) return;
+    const result = this.separateTool.planSeparate(ids[0]);
+    if (!result.ok) {
+      window.alert(result.error);
+      return;
+    }
+    this.history.execute(new SeparateCommand(this.objects, this.assets, result.plan));
+    this.selection.set(result.plan.newObjects.map((o) => o.id));
+  }
+
   connectSelection(): void {
     const ids = this.selectableIds(this.state.selection.get());
     if (ids.length !== 2) return;
@@ -236,6 +506,7 @@ export class App {
       childObjectId: b,
       connectionPointA: [0, 0, 0],
       connectionPointB: [0, 0, 0],
+      type: 'FIXED',
       createdAt: new Date().toISOString(),
     };
     this.history.execute(new ConnectCommand(this.assembly, connection));
@@ -256,8 +527,18 @@ export class App {
 
     dom.addEventListener('pointerdown', (ev) => {
       if (ev.button !== 0 || this.gizmo.isDragging) return;
-      const id = this.raycaster.pick(ev, dom, this.viewport.camera.instance, this.viewport.sceneManager.objectRoot);
-      this.selection.handlePointerPick(id, { shift: ev.shiftKey, ctrl: ev.ctrlKey || ev.metaKey });
+      const objectId = this.raycaster.pick(ev, dom, this.viewport.camera.instance, this.viewport.sceneManager.objectRoot);
+      if (objectId) {
+        this.selection.handlePointerPick(objectId, { shift: ev.shiftKey, ctrl: ev.ctrlKey || ev.metaKey });
+        return;
+      }
+      const refId = this.raycaster.pick(ev, dom, this.viewport.camera.instance, this.referenceImageVisualizer.getGroup());
+      if (refId && !this.referenceImages.get(refId)?.locked) {
+        this.selectReferenceImage(refId);
+        return;
+      }
+      this.selection.handlePointerPick(null, { shift: ev.shiftKey, ctrl: ev.ctrlKey || ev.metaKey });
+      if (!ev.shiftKey && !ev.ctrlKey && !ev.metaKey) this.state.selectedReferenceImageId.set(null);
     });
 
     window.addEventListener('keydown', (ev) => {
@@ -265,10 +546,28 @@ export class App {
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
       if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'z' && !ev.shiftKey) { ev.preventDefault(); this.history.undo(); }
       else if ((ev.ctrlKey || ev.metaKey) && (ev.key.toLowerCase() === 'y' || (ev.key.toLowerCase() === 'z' && ev.shiftKey))) { ev.preventDefault(); this.history.redo(); }
+      else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'd') { ev.preventDefault(); this.duplicateSelection(); }
       else if (ev.key === 'Delete' || ev.key === 'Backspace') { this.deleteSelection(); }
+      else if (!ev.ctrlKey && !ev.metaKey && ev.key.toLowerCase() === 'w') { this.state.activeTool.set('move'); }
+      else if (!ev.ctrlKey && !ev.metaKey && ev.key.toLowerCase() === 'e') { this.state.activeTool.set('rotate'); }
+      else if (!ev.ctrlKey && !ev.metaKey && ev.key.toLowerCase() === 'r') { this.state.activeTool.set('scale'); }
     });
 
     this.state.selection.subscribe((ids) => this.attachGizmoToSelection(this.selectableIds(ids)));
+    // Reference-image selection is mutually exclusive with SceneObject selection (a ReferenceImage
+    // is never a SceneObject, so it can't share `state.selection`) — whichever becomes non-empty
+    // clears the other, from whatever call site triggered the change.
+    this.state.selection.subscribe((ids) => { if (ids.length && this.state.selectedReferenceImageId.get()) this.state.selectedReferenceImageId.set(null); });
+    this.state.selectedReferenceImageId.subscribe((id) => {
+      if (id) {
+        if (this.state.selection.get().length) this.selection.clear();
+        const obj3d = this.referenceImageVisualizer.getObject3D(id);
+        if (obj3d) this.gizmo.attach(obj3d);
+        else this.gizmo.detach();
+      } else if (!this.state.selection.get().length) {
+        this.gizmo.detach();
+      }
+    });
     // Undo/redo (and any other history-driven mutation) can remove or reparent the object the
     // gizmo is currently attached to without changing `selection` itself — re-validate the
     // attachment against live objects every time, or TransformControls errors every frame
@@ -278,6 +577,9 @@ export class App {
       const ids = this.state.selection.get();
       if (ids.includes(objectId)) this.selection.set(ids.filter((id) => id !== objectId));
       this.assembly.removeAllForObject(objectId);
+    });
+    this.bus.on('referenceImage:removed', ({ referenceImageId }) => {
+      if (this.state.selectedReferenceImageId.get() === referenceImageId) this.state.selectedReferenceImageId.set(null);
     });
 
     this.state.activeTool.subscribe((tool) => {
@@ -306,6 +608,12 @@ export class App {
   }
 
   private captureBefore(ids: string[]): void {
+    const refId = this.state.selectedReferenceImageId.get();
+    if (refId) {
+      const ref = this.referenceImages.get(refId);
+      this.refDragBefore = ref ? { position: [...ref.position], rotation: [...ref.rotation], scale: [...ref.scale] } : null;
+      return;
+    }
     this.dragBefore.clear();
     for (const id of ids) {
       const obj = this.objects.getOrThrow(id);
@@ -315,6 +623,17 @@ export class App {
   }
 
   private applyGizmoChange(): void {
+    const refId = this.state.selectedReferenceImageId.get();
+    if (refId) {
+      const object3D = this.referenceImageVisualizer.getObject3D(refId);
+      if (!object3D) return;
+      this.referenceImages.update(refId, {
+        position: [object3D.position.x, object3D.position.y, object3D.position.z],
+        rotation: [object3D.quaternion.x, object3D.quaternion.y, object3D.quaternion.z, object3D.quaternion.w],
+        scale: [object3D.scale.x, object3D.scale.y, object3D.scale.z],
+      });
+      return;
+    }
     const ids = this.selectableIds(this.state.selection.get());
     if (ids.length === 1) {
       const object3D = this.sceneSync.getObject3D(ids[0]);
@@ -330,6 +649,18 @@ export class App {
   }
 
   private commitDrag(): void {
+    const refId = this.state.selectedReferenceImageId.get();
+    if (refId) {
+      const ref = this.referenceImages.get(refId);
+      if (ref && this.refDragBefore) {
+        const after: ReferenceImageTransform = { position: [...ref.position], rotation: [...ref.rotation], scale: [...ref.scale] };
+        if (JSON.stringify(this.refDragBefore) !== JSON.stringify(after)) {
+          this.history.record(new TransformReferenceImageCommand(this.referenceImages, refId, this.refDragBefore, after, `Transformed ${ref.name}`));
+        }
+      }
+      this.refDragBefore = null;
+      return;
+    }
     const deltas: TransformDelta[] = [];
     for (const [id, before] of this.dragBefore) {
       const obj = this.objects.get(id);

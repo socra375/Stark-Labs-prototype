@@ -40,6 +40,9 @@ export function createAssembliesPanel(app: App): HTMLElement {
   app.bus.on('assembly:created', render);
   app.bus.on('assembly:removed', render);
   app.bus.on('object:updated', render);
+  // AssemblyManager.loadAll() (project open/reload) fires no per-connection event — only the
+  // shared 'scene:loaded' event — so the panel would otherwise show stale/empty state after reload.
+  app.bus.on('scene:loaded', render);
   render();
 
   return root;

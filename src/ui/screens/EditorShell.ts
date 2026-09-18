@@ -5,11 +5,13 @@ import { createInspectorPanel } from '../panels/InspectorPanel';
 import { createLeftPanel } from '../panels/LeftPanel';
 import { createMaterialsPanel } from '../panels/MaterialsPanel';
 import { createAssembliesPanel } from '../panels/AssembliesPanel';
+import { createReferenceImagesPanel } from '../panels/ReferenceImagesPanel';
 import { createVersionsPanel } from '../panels/VersionsPanel';
 import { createActivityLogPanel } from '../panels/ActivityLogPanel';
 import { createAIChatPanel } from '../panels/AIChatPanel';
 import { createAIAnalysisPanel } from '../panels/AIAnalysisPanel';
 import { createSimulationBotsPanel } from '../panels/SimulationBotsPanel';
+import { createConstructionPanel } from '../panels/ConstructionPanel';
 import { createLandingScreen } from './LandingScreen';
 
 export function mountEditorShell(root: HTMLElement): App {
@@ -43,9 +45,11 @@ export function mountEditorShell(root: HTMLElement): App {
   right.appendChild(createInspectorPanel(app.inspector));
   right.appendChild(createMaterialsPanel(app));
   right.appendChild(createAssembliesPanel(app));
+  right.appendChild(createReferenceImagesPanel(app));
   right.appendChild(createVersionsPanel(app));
   right.appendChild(createActivityLogPanel(app));
   right.appendChild(createSimulationBotsPanel(app));
+  right.appendChild(createConstructionPanel(app));
   shell.appendChild(createBottomToolbar(app, [], () => {
     aiChat.scrollIntoView({ behavior: 'smooth', block: 'center' });
     aiChat.querySelector('input')?.focus();
