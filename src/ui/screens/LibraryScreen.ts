@@ -1,8 +1,8 @@
 import type { App } from '../../core/App';
 import type { SavedModel } from '../../core/types';
 
-/** Library: MY MODELS is real for M18; MY PARTS/PRINTABLES/THINGIVERSE are real disabled
- * "Coming Soon" tabs (M19/M21) — a future surface, honestly marked, never a fake populated tab. */
+/** Library: MY MODELS and MY PARTS are real; PRINTABLES/THINGIVERSE are real disabled
+ * "Coming Soon" tabs (M21) — a future surface, honestly marked, never a fake populated tab. */
 export function openLibraryScreen(app: App): void {
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop';
@@ -17,14 +17,20 @@ export function openLibraryScreen(app: App): void {
   title.className = 'modal-title';
   title.textContent = 'LIBRARY';
 
+  let activeKind: 'model' | 'part' = 'model';
+
   const tabsRow = document.createElement('div');
   tabsRow.style.cssText = 'display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;';
   const myModelsTab = document.createElement('button');
   myModelsTab.className = 'btn active';
   myModelsTab.style.cssText = 'padding:4px 10px;font-size:11px;';
   myModelsTab.textContent = 'My Models';
-  tabsRow.appendChild(myModelsTab);
-  for (const label of ['My Parts', 'Printables', 'Thingiverse']) {
+  const myPartsTab = document.createElement('button');
+  myPartsTab.className = 'btn';
+  myPartsTab.style.cssText = 'padding:4px 10px;font-size:11px;';
+  myPartsTab.textContent = 'My Parts';
+  tabsRow.append(myModelsTab, myPartsTab);
+  for (const label of ['Printables', 'Thingiverse']) {
     const btn = document.createElement('button');
     btn.className = 'btn';
     btn.style.cssText = 'padding:4px 10px;font-size:11px;';
@@ -45,6 +51,10 @@ export function openLibraryScreen(app: App): void {
   saveBtn.style.cssText = 'padding:4px 10px;font-size:11px;white-space:nowrap;';
   saveBtn.textContent = 'Save Current Scene as Model';
   saveRow.append(nameInput, saveBtn);
+
+  const partsHint = document.createElement('div');
+  partsHint.style.cssText = 'font-size:11px;color:var(--text-2);margin-bottom:12px;display:none;';
+  partsHint.textContent = 'Select object(s) in the scene and use "Save as Part" in the bottom toolbar to add one here.';
 
   const searchInput = document.createElement('input');
   searchInput.className = 'text-field mono';
@@ -78,7 +88,7 @@ export function openLibraryScreen(app: App): void {
     if (!filtered.length) {
       const hint = document.createElement('div');
       hint.className = 'empty-hint';
-      hint.textContent = allModels.length ? 'No models match your search.' : 'No saved models yet.';
+      hint.textContent = allModels.length ? 'No models match your search.' : `No saved ${activeKind === 'model' ? 'models' : 'parts'} yet.`;
       list.appendChild(hint);
       return;
     }
@@ -92,7 +102,8 @@ export function openLibraryScreen(app: App): void {
       nameEl.textContent = model.name;
       const metaEl = document.createElement('div');
       metaEl.style.cssText = 'font-size:10px;color:var(--text-2);';
-      metaEl.textContent = `${objectCount(model)} object(s) · updated ${new Date(model.updatedAt).toLocaleString()}`;
+      const categoryPart = model.category ? ` · ${model.category}` : '';
+      metaEl.textContent = `${objectCount(model)} object(s)${categoryPart} · updated ${new Date(model.updatedAt).toLocaleString()}`;
       info.append(nameEl, metaEl);
 
       const insertBtn = document.createElement('button');
@@ -124,9 +135,21 @@ export function openLibraryScreen(app: App): void {
   }
 
   async function refresh(): Promise<void> {
-    allModels = await app.listLibraryModels('model');
+    allModels = await app.listLibraryModels(activeKind);
     renderList();
   }
+
+  function setActiveTab(kind: 'model' | 'part'): void {
+    activeKind = kind;
+    myModelsTab.classList.toggle('active', kind === 'model');
+    myPartsTab.classList.toggle('active', kind === 'part');
+    saveRow.style.display = kind === 'model' ? 'flex' : 'none';
+    partsHint.style.display = kind === 'part' ? 'block' : 'none';
+    statusLine.textContent = '';
+    void refresh();
+  }
+  myModelsTab.addEventListener('click', () => setActiveTab('model'));
+  myPartsTab.addEventListener('click', () => setActiveTab('part'));
 
   searchInput.addEventListener('input', renderList);
 
@@ -144,7 +167,7 @@ export function openLibraryScreen(app: App): void {
     }
   });
 
-  box.append(title, tabsRow, saveRow, searchInput, statusLine, list, buttons);
+  box.append(title, tabsRow, saveRow, partsHint, searchInput, statusLine, list, buttons);
   backdrop.appendChild(box);
   document.body.appendChild(backdrop);
 

@@ -37,6 +37,7 @@ import { HistoryRepository } from '../storage/HistoryRepository';
 import { ModelLibraryRepository } from '../storage/ModelLibraryRepository';
 import { Serializer } from '../storage/Serializer';
 import { remapSavedModelForInsertion } from '../library/LibraryInsertion';
+import { capturePartSnapshot } from '../library/PartCapture';
 import { InsertLibraryItemCommand } from '../editor/commands/InsertLibraryItemCommand';
 import { AutosaveService } from '../storage/AutosaveService';
 import { getTemplate } from '../templates/TemplateRegistry';
@@ -363,6 +364,28 @@ export class App {
     const payload = remapSavedModelForInsertion(model);
     this.history.execute(new InsertLibraryItemCommand(this.objects, this.materials, this.assets, this.assembly, payload));
     this.selection.set(payload.components.filter((c) => !c.parentId).map((c) => c.id));
+  }
+
+  /** Saves the current selection (each root plus its descendants) as a reusable Part —
+   * self-contained: only the materials/assets/connections that subtree actually uses, never the
+   * whole project's asset library. */
+  async saveSelectionAsPart(name: string, category: string): Promise<SavedModel> {
+    const ids = this.selectableIds(this.state.selection.get());
+    if (!ids.length) throw new Error('Select at least one object to save as a part.');
+    const snapshot = capturePartSnapshot(this.objects, this.materials, this.assembly, this.assets, ids);
+    const now = new Date().toISOString();
+    const model: SavedModel = {
+      id: generateId('model'),
+      kind: 'part',
+      name,
+      category: category || undefined,
+      createdAt: now,
+      updatedAt: now,
+      version: 1,
+      snapshot,
+    };
+    await this.libraryRepo.save(model);
+    return model;
   }
 
   // --- Selection-driven actions -------------------------------------------------

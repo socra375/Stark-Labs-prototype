@@ -1,5 +1,6 @@
 import type { App } from '../../core/App';
 import type { AppTool } from '../../core/AppState';
+import { openSaveAsPartDialog } from '../screens/SaveAsPartDialog';
 
 interface ToolbarButtonSpec {
   tool: AppTool;
@@ -54,17 +55,23 @@ export function createBottomToolbar(app: App, extra: HTMLElement[] = [], onAICli
   deleteBtn.textContent = 'Delete';
   deleteBtn.addEventListener('click', () => app.deleteSelection());
 
+  const savePartBtn = document.createElement('button');
+  savePartBtn.className = 'btn';
+  savePartBtn.textContent = 'Save as Part';
+  savePartBtn.addEventListener('click', () => openSaveAsPartDialog(app));
+
   const refreshSelectionButtons = (): void => {
     const n = app.state.selection.get().length;
     groupBtn.disabled = n < 2;
     ungroupBtn.disabled = n !== 1 || app.objects.get(app.state.selection.get()[0])?.type !== 'group';
     duplicateBtn.disabled = n < 1;
     deleteBtn.disabled = n < 1;
+    savePartBtn.disabled = n < 1;
   };
   app.state.selection.subscribe(refreshSelectionButtons, true);
   app.bus.on('object:updated', refreshSelectionButtons);
 
-  root.append(groupBtn, ungroupBtn, duplicateBtn, deleteBtn);
+  root.append(groupBtn, ungroupBtn, duplicateBtn, deleteBtn, savePartBtn);
   root.appendChild(divider());
 
   const mirrorButtons: HTMLButtonElement[] = (['x', 'y', 'z'] as const).map((axis) => {
