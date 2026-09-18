@@ -63,6 +63,11 @@ export function openImageTo3DWorkspace(app: App): void {
   const statusLine = document.createElement('div');
   statusLine.style.cssText = 'font-size:11px;color:var(--text-2);margin-bottom:10px;min-height:14px;';
 
+  // Real, objectively-computed pixel facts (never object recognition) shown immediately on
+  // upload, before the user spends time generating a preview.
+  const factsLine = document.createElement('div');
+  factsLine.style.cssText = 'font-size:10px;color:var(--text-2);font-family:var(--font-mono);margin-bottom:10px;display:none;';
+
   // --- Preview panels: Original / Silhouette / Depth (canvases) + Point Cloud (mini THREE view) ---
   const previewGrid = document.createElement('div');
   previewGrid.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;';
@@ -175,6 +180,14 @@ export function openImageTo3DWorkspace(app: App): void {
     previewGrid.style.display = 'none';
     estimatedNote.style.display = 'none';
     lastPreview = null;
+    factsLine.style.display = 'none';
+    try {
+      const facts = await app.analyzeImage(file);
+      factsLine.textContent = `${facts.width}×${facts.height} (${facts.aspectRatio.toFixed(2)}:1) · avg color ${facts.averageColor} · ${facts.hasAlphaTransparency ? 'has alpha' : 'no alpha'} · ~${facts.foregroundCoveragePercent}% foreground (estimated)`;
+      factsLine.style.display = 'block';
+    } catch {
+      // Non-critical readout — a failure here never blocks the actual reconstruction flow below.
+    }
   });
 
   generateBtn.addEventListener('click', async () => {
@@ -212,7 +225,7 @@ export function openImageTo3DWorkspace(app: App): void {
     }
   });
 
-  box.append(title, modeRow, uploadRow, statusLine, previewGrid, estimatedNote, buttons);
+  box.append(title, modeRow, uploadRow, factsLine, statusLine, previewGrid, estimatedNote, buttons);
   backdrop.appendChild(box);
   document.body.appendChild(backdrop);
 }

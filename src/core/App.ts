@@ -239,6 +239,24 @@ export class App {
     return this.reconstruction.active.preview({ mode, images: [file] });
   }
 
+  /** Real, objectively-computable pixel facts about an uploaded image (dimensions, transparency,
+   * average color, segmented foreground coverage) — never object recognition. Read-only, nothing
+   * is written to the scene. */
+  async analyzeImage(file: File): ReturnType<AIService['analyzeImage']> {
+    return this.ai.analyzeImage(file);
+  }
+
+  /** Real, scene-derived suggestions (unpaired mirrors, disconnected pieces) for the current
+   * project — never an invented design idea. */
+  async suggestComponents(): ReturnType<AIService['suggestComponents']> {
+    return this.ai.suggestComponents(this.objects, this.assembly);
+  }
+
+  /** A real computed build order from the current hierarchy and assembly connections. */
+  async generateConstructionPlan(): ReturnType<AIService['generateConstructionPlan']> {
+    return this.ai.generateConstructionPlan(this.objects, this.assembly);
+  }
+
   /** Commits a reconstruction: re-runs the deterministic pipeline (cheap enough to not bother
    * caching the preview's intermediates) through to a real BufferGeometry, then applies it as one
    * normal, editable SceneObject via ReconstructionCommitCommand — transform/material/undo/save/

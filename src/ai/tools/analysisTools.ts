@@ -1,6 +1,8 @@
 import type { AITool, ToolContext } from '../types';
 import type { Command } from '../../editor/commands/Command';
 import { AnalysisEngine } from '../AnalysisEngine';
+import { suggestComponents } from '../ComponentSuggestions';
+import { generateConstructionPlan } from '../ConstructionPlan';
 
 /** No-op Command: read-only tools have nothing to mutate/undo, but still flow through the same
  * Parse→Validate→Permission→Preview→Execute pipeline and get a normal activity-log entry. */
@@ -57,4 +59,48 @@ export const analyzeSceneTool: AITool = {
   },
 };
 
-export const analysisTools: AITool[] = [inspectObjectTool, analyzeSceneTool];
+export const suggestComponentsTool: AITool = {
+  name: 'suggest_components',
+  description: 'Suggests real, scene-derived gaps (unpaired mirrors, disconnected pieces) — read-only.',
+  destructive: false,
+  validate(): ReturnType<AITool['validate']> {
+    return { valid: true, errors: [] };
+  },
+  preview(_args, ctx: ToolContext) {
+    const suggestions = suggestComponents(ctx.objects, ctx.assembly);
+    return {
+      operation: 'SUGGEST_COMPONENTS',
+      targets: suggestions.flatMap((s) => s.relatedObjectIds).map((id) => ({ id, name: ctx.objects.get(id)?.name ?? id })),
+      changes: [],
+      affectedCount: 0,
+      summary: suggestions.map((s) => `[${s.kind}] ${s.message}`).join(' '),
+    };
+  },
+  buildCommand() {
+    return new NoOpCommand('Suggested components');
+  },
+};
+
+export const generateConstructionPlanTool: AITool = {
+  name: 'generate_construction_plan',
+  description: 'Generates a real, computed build order from the current hierarchy and assembly connections — read-only.',
+  destructive: false,
+  validate(): ReturnType<AITool['validate']> {
+    return { valid: true, errors: [] };
+  },
+  preview(_args, ctx: ToolContext) {
+    const steps = generateConstructionPlan(ctx.objects, ctx.assembly);
+    return {
+      operation: 'GENERATE_CONSTRUCTION_PLAN',
+      targets: steps.map((s) => ({ id: s.objectId, name: s.objectName })),
+      changes: [],
+      affectedCount: steps.length,
+      summary: steps.length ? steps.map((s) => `${s.order}. ${s.detail}`).join(' ') : 'No mesh objects to plan yet.',
+    };
+  },
+  buildCommand() {
+    return new NoOpCommand('Generated construction plan');
+  },
+};
+
+export const analysisTools: AITool[] = [inspectObjectTool, analyzeSceneTool, suggestComponentsTool, generateConstructionPlanTool];

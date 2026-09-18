@@ -1,6 +1,11 @@
 import type { AIProvider, AIInterpretResult } from './AIProvider';
 import type { ToolCallCandidate } from '../types';
+import type { ObjectManager } from '../../core/ObjectManager';
+import type { AssemblyManager } from '../../editor/AssemblyManager';
 import { GEOMETRY_TYPES } from '../../3d/GeometryFactory';
+import { analyzeImageFacts, type ImageAnalysisResult } from '../ImageAnalysis';
+import { suggestComponents as computeSuggestions, type ComponentSuggestion } from '../ComponentSuggestions';
+import { generateConstructionPlan as computePlan, type ConstructionPlanStep } from '../ConstructionPlan';
 
 type Rule = { pattern: RegExp; build: (m: RegExpMatchArray) => ToolCallCandidate['args'] & { toolName: string } };
 
@@ -39,6 +44,8 @@ const RULES: Rule[] = [
   { pattern: /^disconnect\s+(.+?)\s+(?:and|from)\s+(.+)$/i, build: (m) => ({ toolName: 'disconnect_objects', targetNameA: m[1].trim(), targetNameB: m[2].trim() }) },
   { pattern: /^inspect\s+(?:the\s+)?(.+)$/i, build: (m) => ({ toolName: 'inspect_object', targetName: m[1].trim() }) },
   { pattern: /^analyz[e]\s*(?:the\s+scene)?$/i, build: () => ({ toolName: 'analyze_scene' }) },
+  { pattern: /^suggest\s+(?:missing\s+)?components?$/i, build: () => ({ toolName: 'suggest_components' }) },
+  { pattern: /^(?:generate|create)\s+(?:a\s+)?construction\s+plan$/i, build: () => ({ toolName: 'generate_construction_plan' }) },
   { pattern: /^(?:create|save)\s+(?:a\s+)?version(?:\s+(?:named|called)\s+(.+))?$/i, build: (m) => ({ toolName: 'create_version', name: m[1]?.trim() || `v-${new Date().toLocaleTimeString()}` }) },
   { pattern: /^restore\s+(?:version\s+)?(.+)$/i, build: (m) => ({ toolName: 'restore_version', name: m[1].trim() }) },
 ];
@@ -67,7 +74,20 @@ export class MockProvider implements AIProvider {
       candidates: [],
       message:
         "[MOCK] I couldn't match that to a known command. Try things like: \"create a box\", " +
-        '"delete the torso", "scale both arms by 10%", "mirror arm_l across x", "connect torso and arm_l", or "analyze the scene".',
+        '"delete the torso", "scale both arms by 10%", "mirror arm_l across x", "connect torso and arm_l", ' +
+        '"analyze the scene", "suggest components", or "generate a construction plan".',
     };
+  }
+
+  async analyzeImage(file: File): Promise<ImageAnalysisResult> {
+    return analyzeImageFacts(file);
+  }
+
+  async suggestComponents(objects: ObjectManager, assembly: AssemblyManager): Promise<ComponentSuggestion[]> {
+    return computeSuggestions(objects, assembly);
+  }
+
+  async generateConstructionPlan(objects: ObjectManager, assembly: AssemblyManager): Promise<ConstructionPlanStep[]> {
+    return computePlan(objects, assembly);
   }
 }
