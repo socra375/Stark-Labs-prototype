@@ -34,6 +34,10 @@ import { Database } from '../storage/Database';
 import { ProjectRepository, type LiveScene } from '../storage/ProjectRepository';
 import { VersionRepository } from '../storage/VersionRepository';
 import { HistoryRepository } from '../storage/HistoryRepository';
+import { ModelLibraryRepository } from '../storage/ModelLibraryRepository';
+import { Serializer } from '../storage/Serializer';
+import { remapSavedModelForInsertion } from '../library/LibraryInsertion';
+import { InsertLibraryItemCommand } from '../editor/commands/InsertLibraryItemCommand';
 import { AutosaveService } from '../storage/AutosaveService';
 import { getTemplate } from '../templates/TemplateRegistry';
 import { exportProject, importProjectFromPicker } from '../storage/StarkFileFormat';
@@ -55,7 +59,7 @@ import { AICommandExecutor } from '../ai/AICommandExecutor';
 import { AnalysisEngine } from '../ai/AnalysisEngine';
 import { SimulationEngine } from '../simulation/SimulationEngine';
 import { BotManager } from '../bots/BotManager';
-import type { Vec3, Connection, ProjectMeta, SceneObject, ReferenceImage } from './types';
+import type { Vec3, Connection, ProjectMeta, SceneObject, ReferenceImage, SavedModel } from './types';
 
 /** Top-level orchestrator wiring core managers, the 3D viewport, and app state together. */
 export class App {
@@ -82,6 +86,7 @@ export class App {
   readonly projectRepo: ProjectRepository;
   readonly versionRepo: VersionRepository;
   readonly historyRepo: HistoryRepository;
+  readonly libraryRepo: ModelLibraryRepository;
   readonly autosave: AutosaveService;
   readonly ai = new AIService();
   readonly reconstruction = new ReconstructionService();
@@ -110,6 +115,7 @@ export class App {
     this.projectRepo = new ProjectRepository(this.db);
     this.versionRepo = new VersionRepository(this.db, this.bus);
     this.historyRepo = new HistoryRepository(this.db);
+    this.libraryRepo = new ModelLibraryRepository(this.db);
     this.autosave = new AutosaveService(this.bus, this.projectRepo, this.liveScene());
     this.analysisEngine = new AnalysisEngine(this.objects, this.assembly, this.coords);
     this.bots = new BotManager(this.objects);
@@ -319,6 +325,44 @@ export class App {
   deleteReferenceImage(id: string): void {
     this.history.execute(new DeleteReferenceImageCommand(this.referenceImages, this.assets, id));
     if (this.state.selectedReferenceImageId.get() === id) this.state.selectedReferenceImageId.set(null);
+  }
+
+  // --- Library (My Models / My Parts) -----------------------------------------
+
+  /** Captures the whole current scene (same snapshot shape every other consumer uses) as a
+   * named, independently-stored library entry — not tied to the current project. */
+  async saveCurrentSceneAsModel(name: string): Promise<SavedModel> {
+    const snapshot = Serializer.capture(this.objects, this.materials, this.assembly, this.assets, this.referenceImages);
+    const now = new Date().toISOString();
+    const model: SavedModel = {
+      id: generateId('model'),
+      kind: 'model',
+      name,
+      createdAt: now,
+      updatedAt: now,
+      version: 1,
+      snapshot: { components: snapshot.components, materials: snapshot.materials, assemblies: snapshot.assemblies, assets: snapshot.assets },
+    };
+    await this.libraryRepo.save(model);
+    return model;
+  }
+
+  async listLibraryModels(kind?: 'model' | 'part'): Promise<SavedModel[]> {
+    return this.libraryRepo.list(kind);
+  }
+
+  async deleteLibraryModel(id: string): Promise<void> {
+    await this.libraryRepo.remove(id);
+  }
+
+  /** Inserts a real independent copy (fresh ids throughout, deep-cloned data — see
+   * remapSavedModelForInsertion) as new root-level object(s) in the current scene. */
+  async insertLibraryItem(modelId: string): Promise<void> {
+    const model = await this.libraryRepo.get(modelId);
+    if (!model) throw new Error('Library model not found.');
+    const payload = remapSavedModelForInsertion(model);
+    this.history.execute(new InsertLibraryItemCommand(this.objects, this.materials, this.assets, this.assembly, payload));
+    this.selection.set(payload.components.filter((c) => !c.parentId).map((c) => c.id));
   }
 
   // --- Selection-driven actions -------------------------------------------------

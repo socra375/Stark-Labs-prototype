@@ -1,5 +1,6 @@
 import type { App } from '../../core/App';
 import { openImageTo3DWorkspace } from '../screens/ImageTo3DWorkspace';
+import { openLibraryScreen } from '../screens/LibraryScreen';
 
 export function createHeader(app: App): HTMLElement {
   const root = document.createElement('div');
@@ -57,6 +58,13 @@ export function createHeader(app: App): HTMLElement {
   });
   app.state.currentProject.subscribe((p) => { addReferenceBtn.disabled = !p; }, true);
 
+  const libraryBtn = document.createElement('button');
+  libraryBtn.className = 'btn';
+  libraryBtn.style.cssText = 'padding:4px 10px;font-size:11px;';
+  libraryBtn.textContent = 'Library';
+  libraryBtn.addEventListener('click', () => openLibraryScreen(app));
+  app.state.currentProject.subscribe((p) => { libraryBtn.disabled = !p; }, true);
+
   const exportBtn = document.createElement('button');
   exportBtn.className = 'btn';
   exportBtn.style.cssText = 'padding:4px 10px;font-size:11px;';
@@ -70,7 +78,7 @@ export function createHeader(app: App): HTMLElement {
   projectsBtn.textContent = 'Projects';
   projectsBtn.addEventListener('click', () => app.state.screen.set('landing'));
 
-  right.append(projectName, importModelBtn, imageTo3DBtn, addReferenceBtn, exportBtn, projectsBtn);
+  right.append(projectName, importModelBtn, imageTo3DBtn, addReferenceBtn, libraryBtn, exportBtn, projectsBtn);
   root.append(brand, right);
   return root;
 }
