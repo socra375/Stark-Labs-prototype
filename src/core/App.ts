@@ -60,6 +60,7 @@ import { AICommandExecutor } from '../ai/AICommandExecutor';
 import { AnalysisEngine } from '../ai/AnalysisEngine';
 import { SimulationEngine } from '../simulation/SimulationEngine';
 import { BotManager } from '../bots/BotManager';
+import { ConstructionEngine } from '../construction/ConstructionEngine';
 import { JoinTool } from '../editor/JoinTool';
 import { JoinCommand } from '../editor/commands/JoinCommand';
 import { SeparateTool } from '../editor/SeparateTool';
@@ -102,6 +103,7 @@ export class App {
   readonly analysisEngine: AnalysisEngine;
   readonly simulation = new SimulationEngine();
   readonly bots: BotManager;
+  readonly construction: ConstructionEngine;
   private pivot: GroupTransformPivot;
   private dragBefore: Map<string, TransformDelta['before']> = new Map();
   private refDragBefore: ReferenceImageTransform | null = null;
@@ -128,6 +130,7 @@ export class App {
     this.autosave = new AutosaveService(this.bus, this.projectRepo, this.liveScene());
     this.analysisEngine = new AnalysisEngine(this.objects, this.assembly, this.coords);
     this.bots = new BotManager(this.objects);
+    this.construction = new ConstructionEngine(this.objects, this.assembly);
     this.aiExecutor = new AICommandExecutor(
       this.aiTools,
       new ToolParser(this.objects),

@@ -11,6 +11,7 @@ import { createActivityLogPanel } from '../panels/ActivityLogPanel';
 import { createAIChatPanel } from '../panels/AIChatPanel';
 import { createAIAnalysisPanel } from '../panels/AIAnalysisPanel';
 import { createSimulationBotsPanel } from '../panels/SimulationBotsPanel';
+import { createConstructionPanel } from '../panels/ConstructionPanel';
 import { createLandingScreen } from './LandingScreen';
 
 export function mountEditorShell(root: HTMLElement): App {
@@ -48,6 +49,7 @@ export function mountEditorShell(root: HTMLElement): App {
   right.appendChild(createVersionsPanel(app));
   right.appendChild(createActivityLogPanel(app));
   right.appendChild(createSimulationBotsPanel(app));
+  right.appendChild(createConstructionPanel(app));
   shell.appendChild(createBottomToolbar(app, [], () => {
     aiChat.scrollIntoView({ behavior: 'smooth', block: 'center' });
     aiChat.querySelector('input')?.focus();

@@ -8,6 +8,7 @@ export interface InspectorFields {
   id: Signal<string | null>;
   name: Signal<string>;
   type: Signal<string>;
+  origin: Signal<string>;
   positionX: Signal<number>; positionY: Signal<number>; positionZ: Signal<number>;
   rotationXDeg: Signal<number>; rotationYDeg: Signal<number>; rotationZDeg: Signal<number>;
   scaleX: Signal<number>; scaleY: Signal<number>; scaleZ: Signal<number>;
@@ -23,6 +24,7 @@ export class Inspector {
     id: signal<string | null>(null),
     name: signal(''),
     type: signal(''),
+    origin: signal(''),
     positionX: signal(0), positionY: signal(0), positionZ: signal(0),
     rotationXDeg: signal(0), rotationYDeg: signal(0), rotationZDeg: signal(0),
     scaleX: signal(1), scaleY: signal(1), scaleZ: signal(1),
@@ -93,10 +95,12 @@ export class Inspector {
       this.fields.id.set(null);
       this.fields.name.set('');
       this.fields.type.set('');
+      this.fields.origin.set('');
     } else {
       this.fields.id.set(obj.id);
       this.fields.name.set(obj.name);
       this.fields.type.set(obj.geometry?.type ?? obj.type);
+      this.fields.origin.set(obj.metadata.origin ?? 'build');
       this.fields.positionX.set(obj.position[0]); this.fields.positionY.set(obj.position[1]); this.fields.positionZ.set(obj.position[2]);
       this.fields.rotationXDeg.set(obj.rotation[0] / RAD); this.fields.rotationYDeg.set(obj.rotation[1] / RAD); this.fields.rotationZDeg.set(obj.rotation[2] / RAD);
       this.fields.scaleX.set(obj.scale[0]); this.fields.scaleY.set(obj.scale[1]); this.fields.scaleZ.set(obj.scale[2]);
